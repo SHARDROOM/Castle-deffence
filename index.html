@@ -1547,7 +1547,13 @@ function makeArm(){ // 1인칭 팔: 옛날 상자 모양 팔뚝·주먹을 하�
 }
 const armVL = makeArm(), armVR = makeArm();
 const ARM_S = {L: new THREE.Vector3(-.3,-.6,-.12), R: new THREE.Vector3(.36,-.6,-.1)}; // 화면 밖 팔꿈치 쪽
-const THRUST_ELBOW = new THREE.Vector3(-.08,-.62,-.22); // 레이피어 찌르기: 오른팔을 왼쪽으로 끌어당겨 아래팔이 왼쪽 아래에서 올라옴
+const THRUST_ELBOW = new THREE.Vector3(-.14,-.29,-.42);  // 레이피어 찌르기: 오른팔을 왼쪽으로 끌어당겨 팔꿈치가 화면 아래쪽에 살짝 보임
+const THRUST_SHOULDER = new THREE.Vector3(.26,-.66,.02);  // 위팔이 이어지는 오른쪽 어깨 (화면 밖)
+const armVRUpper = (() => { // 찌를 때만 보이는 오른쪽 위팔 + 팔꿈치
+  const g = new THREE.Group(), up = new THREE.Mesh(new THREE.BoxGeometry(.085, 1, .085).translate(0, .5, 0), ARM_M.sleeve);
+  const elbow = new THREE.Mesh(new THREE.SphereGeometry(.048, 10, 8), ARM_M.sleeve);
+  g.add(up, elbow); g.visible = false; camera.add(g); return {g, up, elbow};
+})();
 let armRS = ARM_S.R; // 지금 오른팔 팔꿈치 기준점 (animateSword가 정함)
 const _av = new THREE.Vector3(), _ad = new THREE.Vector3(), _UP = new THREE.Vector3(0,1,0);
 const _wd = new THREE.Vector3(), _wr = new THREE.Vector3(), _hz = new THREE.Vector3(), _hm = new THREE.Matrix4();
@@ -1742,6 +1748,7 @@ function updateItem(dt){
 }
 
 function updateViewArms(){
+  armVRUpper.g.visible = false; // 레이피어 찌를 때만 아래에서 다시 켬
   if (itemUse && state === 'play'){ // 회복템 사용 중: 총은 내리고 두 팔로 붕대·주사 동작
     gun.visible = false; scab.visible = false; armVL.g.visible = armVR.g.visible = true; return;
   }
@@ -1761,6 +1768,12 @@ function updateViewArms(){
     rp.lerp(kp, w); if (w > .5) rax = axisOf([0,1,0], _q1.clone().multiply(bgv.quaternion));
   }
   placeArm(armVR, rp, W.melee ? armRS : ARM_S.R, rax);
+  armVRUpper.g.visible = sword && armRS === THRUST_ELBOW; // 레이피어 찌르기: 팔꿈치에서 어깨까지 위팔
+  if (armVRUpper.g.visible){
+    const d = _av.copy(THRUST_SHOULDER).sub(THRUST_ELBOW), len = d.length();
+    armVRUpper.up.position.copy(THRUST_ELBOW); armVRUpper.up.scale.set(1, len, 1); armVRUpper.up.quaternion.setFromUnitVectors(_UP, d.normalize());
+    armVRUpper.elbow.position.copy(THRUST_ELBOW);
+  }
   if (sword && W.rapier){ // 레이피어: 왼손은 뒷짐 (칼집에 있을 때와 뽑고 넣을 때만 칼집을 잡음)
     if (!swordOut || drawT > 0 || sheathT > 0){ scab.updateMatrix(); const lp = _av.set(0, .3, 0).applyMatrix4(scab.matrix); placeArm(armVL, lp.clone(), ARM_S.L, axisOf([0,1,0], scab.quaternion)); }
     else armVL.g.visible = false;
