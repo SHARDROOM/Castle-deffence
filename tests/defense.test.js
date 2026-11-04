@@ -40,9 +40,17 @@ test('가드 감소율: 최소 5%, 최대 60%, 강도 0은 100으로', () => {
   close(Defense.guardReduction(0), .3);
 });
 
-test('아드레날린은 가드 계산 전에 적용된다 (막은 양도 줄어듦)', () => {
+test('아드레날린은 가드 다음에 적용된다 (막은 양·반격 위력은 그대로)', () => {
   const r = Defense.resolve(atk('bossMelee'), def(Object.assign({ adrenT: 1 }, GUARD)));
-  close(r.guardBlocked, 7 * .3); close(r.damage, 7 * .7);
+  close(r.guardBlocked, 3); close(r.damage, 7 * .7);
+});
+
+test('지키는 자 + 대검(guardResist)으로 가드하면 넉백·둔화를 버팀, 다른 조합은 그대로', () => {
+  const resist = Defense.resolve(atk('bossMelee'), def(Object.assign({ guardResist: true }, GUARD)));
+  assert.equal(resist.landed, true); assert.equal(resist.resistDebuff, true); close(resist.damage, 7);
+  assert.equal(Defense.resolve(atk('bossMelee'), def(GUARD)).resistDebuff, false);
+  // 가드하지 않으면 조합이어도 버티지 못함
+  assert.equal(Defense.resolve(atk('bossMelee'), def({ guardResist: true })).resistDebuff, false);
 });
 
 test('가드는 패리 불가 공격도 줄인다', () => {
@@ -77,11 +85,14 @@ test('부분 패리: 패리 강도가 pow보다 낮으면 패리되지만 60% �
 });
 
 // ---------- 병사 근접: 패리를 먼저 본다 ----------
-test('병사 근접: 사거리 안이면 구르기·처형 중에도 패리', () => {
-  for (const extra of [ROLL, EXEC]) {
-    const r = Defense.resolve(atk('soldierMelee', { dist: 2 }), def(Object.assign({}, PARRY, extra)));
-    assert.equal(r.outcome, 'parried'); assert.equal(r.parryTarget, ENEMY);
-  }
+test('병사 근접: 구르는 중에는 패리하지 않고 피함', () => {
+  const r = Defense.resolve(atk('soldierMelee', { dist: 2 }), def(Object.assign({}, PARRY, ROLL)));
+  assert.equal(r.outcome, 'dodged'); assert.equal(r.parried, false);
+});
+
+test('병사 근접: 사거리 안이면 처형 중에도 패리', () => {
+  const r = Defense.resolve(atk('soldierMelee', { dist: 2 }), def(Object.assign({}, PARRY, EXEC)));
+  assert.equal(r.outcome, 'parried'); assert.equal(r.parryTarget, ENEMY);
 });
 
 test('병사 근접: 미리 잰 dist를 쓴다', () => {
@@ -100,9 +111,14 @@ test('화살: 구르면 회피 표시, 화살은 계속 날아감', () => {
   assert.equal(r.outcome, 'dodged'); assert.equal(r.showDodge, true); assert.equal(r.returnProjectile, false);
 });
 
-test('화살: 패리하면 사거리 무시하고 되돌림, 비틀거릴 적은 없음', () => {
-  const r = Defense.resolve(atk('arrow', { from: { x: 0, z: 50 } }), def(PARRY));
+test('화살: 패리를 누른 순간 사거리 안이었으면 되돌림 (쏜 적과의 거리는 무관), 비틀거릴 적은 없음', () => {
+  const r = Defense.resolve(atk('arrow', { from: { x: 0, z: 50 }, inParryRange: true }), def(PARRY));
   assert.equal(r.outcome, 'parried'); assert.equal(r.returnProjectile, true); assert.equal(r.parryTarget, null);
+});
+
+test('화살: 너무 일찍 눌러서(사거리 밖) 패리 창이어도 그대로 맞음', () => {
+  const r = Defense.resolve(atk('arrow', { inParryRange: false }), def(PARRY));
+  assert.equal(r.outcome, 'hit'); assert.equal(r.returnProjectile, false); close(r.damage, 10);
 });
 
 test('화살: 가드하면 되돌리면서 줄어든 피해를 받음', () => {
@@ -116,18 +132,26 @@ test('화살: 처형 중에 패리 창이면 되돌리기만 (피해 없음)', (
 });
 
 // ---------- 반사탄 ----------
-test('반사탄: 보스가 살아 있으면 구르는 중에도 패리로 되돌림', () => {
-  const r = Defense.resolve(atk('bullet', { canReturn: true }), def(Object.assign({}, ROLL, PARRY)));
+test('반사탄: 구르는 중에는 패리·가드하지 않고 피함 (되돌리지도 않음)', () => {
+  for (const extra of [PARRY, GUARD]) {
+    const r = Defense.resolve(atk('bullet', { canReturn: true, inParryRange: true }), def(Object.assign({}, ROLL, extra)));
+    assert.equal(r.outcome, 'dodged'); assert.equal(r.returnProjectile, false); assert.equal(r.landed, false);
+  }
+});
+
+test('반사탄: 보스가 살아 있고 누른 순간 사거리 안이었으면 패리로 되돌림', () => {
+  const r = Defense.resolve(atk('bullet', { canReturn: true, inParryRange: true }), def(PARRY));
   assert.equal(r.outcome, 'parried'); assert.equal(r.returnProjectile, true);
+  assert.equal(Defense.resolve(atk('bullet', { canReturn: true, inParryRange: false }), def(PARRY)).outcome, 'hit');
 });
 
-test('반사탄: 가드하며 구르면 되돌리되 피해 없음', () => {
-  const r = Defense.resolve(atk('bullet', { canReturn: true }), def(Object.assign({}, ROLL, GUARD)));
-  assert.equal(r.outcome, 'dodged'); assert.equal(r.returnProjectile, true); assert.equal(r.landed, false);
+test('반사탄: 가드는 사거리와 관계없이 되돌리며 줄어든 피해를 받음', () => {
+  const r = Defense.resolve(atk('bullet', { canReturn: true, inParryRange: false }), def(GUARD));
+  assert.equal(r.outcome, 'guarded'); assert.equal(r.returnProjectile, true); close(r.damage, 7);
 });
 
-test('반사탄: 보스가 없으면 되돌리지 않고, 패리 창이면 그 자리에서 패리', () => {
-  const r = Defense.resolve(atk('bullet', { canReturn: false, src: undefined }), def(PARRY));
+test('반사탄: 보스가 없으면 되돌리지 않고, 사거리 안 패리면 그 자리에서 패리', () => {
+  const r = Defense.resolve(atk('bullet', { canReturn: false, src: undefined, inParryRange: true }), def(PARRY));
   assert.equal(r.outcome, 'parried'); assert.equal(r.returnProjectile, false); assert.equal(r.parryTarget, null);
 });
 
