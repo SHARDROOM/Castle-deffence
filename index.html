@@ -1549,11 +1549,43 @@ const armVL = makeArm(), armVR = makeArm();
 const ARM_S = {L: new THREE.Vector3(-.3,-.6,-.12), R: new THREE.Vector3(.36,-.6,-.1)}; // 화면 밖 팔꿈치 쪽
 const THRUST_ELBOW = new THREE.Vector3(-.14,-.29,-.42);  // 레이피어 찌르기: 오른팔을 왼쪽으로 끌어당겨 팔꿈치가 화면 아래쪽에 살짝 보임
 const THRUST_SHOULDER = new THREE.Vector3(.26,-.66,.02);  // 위팔이 이어지는 오른쪽 어깨 (화면 밖)
-const armVRUpper = (() => { // 찌를 때만 보이는 오른쪽 위팔 + 팔꿈치
-  const g = new THREE.Group(), up = new THREE.Mesh(new THREE.BoxGeometry(.085, 1, .085).translate(0, .5, 0), ARM_M.sleeve);
-  const elbow = new THREE.Mesh(new THREE.SphereGeometry(.048, 10, 8), ARM_M.sleeve);
-  g.add(up, elbow); g.visible = false; camera.add(g); return {g, up, elbow};
-})();
+// 위팔·아래팔·주먹을 뼈 3개로 이은 스키닝 팔 (팔꿈치·손목이 끊기지 않고 휘어짐). 레이피어로 찌를 때 오른팔로 씀
+function makeArm3(){
+  const g = new THREE.Group();
+  const upper = new THREE.Bone(), fore = new THREE.Bone(), hand = new THREE.Bone(); g.add(upper, fore, hand);
+  fore.position.set(0, 1, 0); hand.position.set(0, 2.06, 0); hand.rotation.x = Math.PI; // 붙일 때 자세: 위팔 0~1, 아래팔 1~2, 주먹 2.06
+  const ug = new THREE.BoxGeometry(.085, 1, .085, 1, 12, 1); ug.translate(0, .5, 0);
+  const fg = new THREE.BoxGeometry(.075, 1, .075, 1, 12, 1); fg.translate(0, 1.5, 0);
+  const hg = new THREE.BoxGeometry(.1, .075, .066, 2, 3, 1); hg.translate(0, 2.06, 0);
+  const pos = [], nor = [], idx = [], si = [], sw = [];
+  const clamp01 = v => Math.min(1, Math.max(0, v));
+  const addG = (geo, part) => {
+    const p = geo.attributes.position, n = geo.attributes.normal, o = pos.length/3;
+    for (let i=0;i<p.count;i++){
+      const y = p.getY(i); pos.push(p.getX(i), y, p.getZ(i)); nor.push(n.getX(i), n.getY(i), n.getZ(i));
+      let w = [0, 0, 0];                                                       // [위팔, 아래팔, 주먹]
+      if (part === 0){ const t = clamp01((y - .82)/.18)*.5; w = [1 - t, t, 0]; }  // 팔꿈치 근처는 아래팔과 섞음
+      else if (part === 1){
+        const e = clamp01((1.18 - y)/.18)*.5, h = clamp01((y - 1.9)/.1)*.5;     // 팔꿈치 쪽은 위팔, 손목 쪽은 주먹과 섞음
+        w = [e, 1 - e - h, h];
+      } else { const t = clamp01((y - 2.0)/.03 + .5); w = [0, 1 - t, t]; }
+      si.push(0, 1, 2, 0); sw.push(w[0], w[1], w[2], 0);
+    }
+    const id = geo.index.array; for (let i=0;i<id.length;i++) idx.push(id[i] + o);
+    return id.length;
+  };
+  const geo = new THREE.BufferGeometry();
+  const nArm = addG(ug, 0) + addG(fg, 1), nH = addG(hg, 2);
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4)); geo.setIndex(idx);
+  geo.addGroup(0, nArm, 0); geo.addGroup(nArm, nH, 1);
+  const mS = ARM_M.sleeve.clone(), mG = ARM_M.glove.clone(); mS.skinning = mG.skinning = true;
+  const mesh = new THREE.SkinnedMesh(geo, [mS, mG]); mesh.frustumCulled = false; g.add(mesh);
+  camera.add(g); g.updateMatrixWorld(true); mesh.bind(new THREE.Skeleton([upper, fore, hand]));
+  g.visible = false;
+  return {g, upper, fore, hand, mesh};
+}
+const armVR3 = makeArm3();
 let armRS = ARM_S.R; // 지금 오른팔 팔꿈치 기준점 (animateSword가 정함)
 const _av = new THREE.Vector3(), _ad = new THREE.Vector3(), _UP = new THREE.Vector3(0,1,0);
 const _wd = new THREE.Vector3(), _wr = new THREE.Vector3(), _hz = new THREE.Vector3(), _hm = new THREE.Matrix4();
@@ -1748,7 +1780,7 @@ function updateItem(dt){
 }
 
 function updateViewArms(){
-  armVRUpper.g.visible = false; // 레이피어 찌를 때만 아래에서 다시 켬
+  armVR3.g.visible = false; // 레이피어 찌를 때만 아래에서 다시 켬
   if (itemUse && state === 'play'){ // 회복템 사용 중: 총은 내리고 두 팔로 붕대·주사 동작
     gun.visible = false; scab.visible = false; armVL.g.visible = armVR.g.visible = true; return;
   }
@@ -1767,13 +1799,12 @@ function updateViewArms(){
     bgv.updateMatrix(); const kp = _av.set(.058, 0, 0).applyMatrix4(bgv.matrix).applyMatrix4(gunModel.matrix).applyMatrix4(gun.matrix).clone();
     rp.lerp(kp, w); if (w > .5) rax = axisOf([0,1,0], _q1.clone().multiply(bgv.quaternion));
   }
-  placeArm(armVR, rp, W.melee ? armRS : ARM_S.R, rax);
-  armVRUpper.g.visible = sword && armRS === THRUST_ELBOW; // 레이피어 찌르기: 팔꿈치에서 어깨까지 위팔
-  if (armVRUpper.g.visible){
-    const d = _av.copy(THRUST_SHOULDER).sub(THRUST_ELBOW), len = d.length();
-    armVRUpper.up.position.copy(THRUST_ELBOW); armVRUpper.up.scale.set(1, len, 1); armVRUpper.up.quaternion.setFromUnitVectors(_UP, d.normalize());
-    armVRUpper.elbow.position.copy(THRUST_ELBOW);
-  }
+  if (sword && armRS === THRUST_ELBOW){ // 레이피어 찌르기: 어깨-팔꿈치-손을 이은 스키닝 팔 (팔꿈치가 화면 아래에 살짝 보임)
+    armVR.g.visible = false; armVR3.g.visible = true;
+    placeArm(armVR3, rp, THRUST_ELBOW, rax);                                     // 아래팔·주먹 (팔꿈치 → 손목)
+    const d = _av.copy(THRUST_ELBOW).sub(THRUST_SHOULDER), len = d.length();    // 위팔 (어깨 → 팔꿈치)
+    armVR3.upper.position.copy(THRUST_SHOULDER); armVR3.upper.scale.set(1, len, 1); armVR3.upper.quaternion.setFromUnitVectors(_UP, d.normalize());
+  } else placeArm(armVR, rp, W.melee ? armRS : ARM_S.R, rax);
   if (sword && W.rapier){ // 레이피어: 왼손은 뒷짐 (칼집에 있을 때와 뽑고 넣을 때만 칼집을 잡음)
     if (!swordOut || drawT > 0 || sheathT > 0){ scab.updateMatrix(); const lp = _av.set(0, .3, 0).applyMatrix4(scab.matrix); placeArm(armVL, lp.clone(), ARM_S.L, axisOf([0,1,0], scab.quaternion)); }
     else armVL.g.visible = false;
