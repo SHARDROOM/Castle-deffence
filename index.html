@@ -1609,6 +1609,7 @@ function clearItemFx(){
   if (itemFx.syringe) itemFx.syringe.visible = false;
   if (itemFx.strip) itemFx.strip.visible = false;
   itemFx.wraps.forEach(w => camera.remove(w)); itemFx.wraps.length = 0;
+  if (itemFx.syringe){ itemFx.syringe.userData.plunger.position.y = .05; itemFx.syringe.userData.liquid.scale.y = 1; } // 취소돼도 다음 주사기는 처음 모양
 }
 // 거즈 붕대 재질: 가로세로로 성기게 짠 천 무늬 + 약간의 얼룩
 const gauzeTex = canvasTex(64, (g2, n) => {
@@ -1673,7 +1674,7 @@ function updateItem(dt){
     }
   }
   placeArm(armVR, rp, ARM_S.R, rax);
-  if (k >= 1){ healTo(it.heal); clearItemFx(); if (itemFx.syringe){ itemFx.syringe.userData.plunger.position.y = .05; itemFx.syringe.userData.liquid.scale.y = 1; } itemUse = null; updateItemBar(); }
+  if (k >= 1){ healTo(it.heal); clearItemFx(); itemUse = null; updateItemBar(); }
 }
 
 function updateViewArms(){
@@ -2718,7 +2719,7 @@ function resetBoss(){
   if (droppedShield){ scene.remove(droppedShield); droppedShield = null; }
   rbullets.forEach(b => scene.remove(b.m)); rbullets.length = 0;
   bossFx.forEach(f => scene.remove(f.m)); bossFx.length = 0;
-  bossTeleg.visible = false; $('bossBar').classList.add('hide');
+  bossTeleg.visible = false; $('bossBar').classList.add('hide'); $('bossBar').classList.remove('enraged'); $('bossBar').querySelector('.bn').textContent = '철의 거인';
   slowT = 0; shakeT = 0; $('slowFx').style.opacity = 0;
 }
 
@@ -2737,6 +2738,7 @@ function resetSword(){
   skillG = 0; skillPh = null; waves.forEach(wv => scene.remove(wv.g)); waves.length = 0;
   sheathT = 0; swordOut = false; drawT = 0; pendingSwing = false; greatRel = null; sheathPlant = false; guarding = false; parryHeld = false; guardSlashQ = null; guardBlocked = 0;
   swingT = 0; swordHitT = 0; parryT = 0; parryCd = 0; exec = null; rageT = 0; hitStopT = 0;
+  parryBuf = 0; parryHoldT = 0; parryHealed = false; parryHit = false; knockT = 0; sheathParry = false; swordIdleT = 0; // 패리 입력 예약·튕겨남 자세
   slashes.forEach(sl => camera.remove(sl.m)); slashes.length = 0;
 }
 function slashFx(angle, ox, oy, len, white){ // 화면에 남는 칼자국
@@ -3994,7 +3996,7 @@ function gainXP(n){
 function updateXP(){ $('xpLv').textContent = 'Lv ' + level; $('xpFill').style.width = (xp/xpNeed()*100) + '%'; }
 function resetLevels(){
   for (const k in up) up[k] = 0;
-  level = 1; xp = 0; pendingLv = 0; levelOpen = false; $('levelUp').classList.add('hide'); updateXP();
+  level = 1; xp = 0; pendingLv = 0; heldXP = 0; levelOpen = false; $('levelUp').classList.add('hide'); updateXP();
 }
 
 // ---------- 골드 ----------
@@ -4374,21 +4376,53 @@ function showLoadout(){
 }
 
 // ---------- 게임 흐름 ----------
-function resetGame(){
-  initAudio(); stopMusic(); playMusic();
+// ---------- 새 판: 판에 묶인 상태를 하위 시스템별로 초기화 ----------
+// 새 변수를 만들면 여기 중 알맞은 reset*에 넣을 것. (일본도·스킬은 resetSword, 레벨은 resetLevels,
+// 보스는 resetBoss, 골드·회복템은 resetShop, 장비는 armory, 웨이브는 director)
+let WORLD0 = null; // 첫 판 시작 때의 엄폐물·충돌 상자·횃불 목록 (보스가 부순 것을 되살릴 때 씀)
+function resetWorld(){ // 적·화살·보급품을 치우고, 보스가 부순 엄폐물을 원래 순서대로 되살림
   enemies.slice().forEach(e=>scene.remove(e.g)); enemies.length=0;
   shots.forEach(s=>scene.remove(s.m)); shots.length=0;
-  armory.resetGear(); activeKey = weaponKey; W = makeWeapon(weaponKey); buildGun(); spin = 0; dropTimer = 45;
-  pickups.forEach(k=>scene.remove(k.g)); pickups.length = 0;
-  weaponUI();
+  pickups.forEach(k=>scene.remove(k.g)); pickups.length = 0; dropTimer = 45;
+  if (!WORLD0){ WORLD0 = {obstacles: obstacles.slice(), obMeshes: obMeshes.slice(), torches: torches.slice()}; return; }
+  let restored = false;
+  for (const o of WORLD0.obstacles){
+    if (!o.prop || !o.prop.broken) continue;
+    o.prop.broken = false; for (const m of o.prop.meshes) scene.add(m); restored = true;
+  }
+  if (!restored) return;
+  obstacles.length = 0; obstacles.push(...WORLD0.obstacles);
+  obMeshes.length = 0; obMeshes.push(...WORLD0.obMeshes);
+  torches.length = 0; torches.push(...WORLD0.torches);
+  buildGrid(); flowCell = -1;
+}
+function resetGun(){ // 무기와 총 자세 (장비를 먼저 초기화해야 무기 성능이 맞음)
+  activeKey = weaponKey; W = makeWeapon(weaponKey); buildGun(); spin = 0;
+  boltT = boltDur = boltEv = 0; pumpT = pumpDur = pumpEv = 0; bmgStack = 0; // 볼트·펌프 장전 동작, .50 BMG 누적 반동
+  gunKick = 0; cantK = 0; cantHold = 0; manualCant = false; adsK = 0; dualKickR = dualKickL = 0;
+  kneelDip = 0; reloadDip = 0; dualFx = null; dualEv = 0; setMagsVisible(true);
   scoped = true; setScope(false); scoped = false;
   $('scope').style.opacity = 0; $('cross').style.opacity = 1; gun.visible = true;
   camera.fov = 75; camera.updateProjectionMatrix();
+  ammo=W.mag; reloading=0; fireCd=0; gun.rotation.x=0;
+}
+function resetPlayer(){ // 위치·시점·체력·움직임
   yawObj.position.set(0,1.6,-4); yaw=Math.PI; pitch=0; camera.rotation.z=0;
-  hp=100; score=0; ammo=W.mag; reloading=0; fireCd=0; vig=0;
-  footY=0; vy=0; onGround=true; rollT=0; rollCd=0; gun.rotation.x=0; lastPX=0; lastPZ=0; pVel.set(0,0,0); kbVx = 0; kbVz = 0; resetLevels(); resetBoss(); resetSword(); resetShop();
+  recoilQ.p = 0; recoilQ.y = 0; recoilBack = 0; // 아직 적용 안 된 반동
+  hp=100; score=0; vig=0;
+  footY=0; vy=0; onGround=true; rollT=0; rollCd=0; lastPX=0; lastPZ=0; pVel.set(0,0,0); kbVx = 0; kbVz = 0;
+  firing = false; paused = false; // 이전 판이 레벨업 창과 함께 끝났어도 새 판은 멈추지 않음
+}
+function resetGame(){
+  initAudio(); stopMusic(); playMusic();
+  resetWorld();
+  armory.resetGear(); // 장비 → 무기 순서 (무기 성능이 장비를 읽음)
+  resetGun();
+  resetPlayer();      // hp = 100은 resetLevels(최대 체력 증강) 전이어도 괜찮음 (리터럴 100)
+  resetLevels(); resetBoss(); resetSword(); resetShop();
+  weaponUI();         // resetSword 뒤: 스킬 게이지가 지난 판 값으로 보이지 않게
   state='play'; $('loadout').classList.add('hide');
-  runWaveCommands(director.start(enemies)); // 새 판: 웨이브 1, 이전 판의 웨이브 예약은 사라짐
+  runWaveCommands(director.start(enemies)); // 맨 끝: 웨이브 1 (전역 wave를 맞추고 HUD를 처음 갱신)
 }
 function gameOver(){
   state='over'; firing=false; stopMusic(); sfx.over(); setScope(false);
