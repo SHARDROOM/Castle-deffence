@@ -1,0 +1,44 @@
+# 게임을 GitHub Pages에 배포 (main에 머지될 때마다, 또는 Actions에서 직접 실행)
+# 저장소 Settings → Pages → Source를 "GitHub Actions"로 두어야 동작한다.
+# 배포 전에 단위 테스트(node --test)를 돌려서, 실패하면 배포하지 않는다.
+name: Deploy to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency: # 새 배포가 오면 아직 끝나지 않은 이전 배포는 취소
+  group: deploy-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Unit tests
+        run: node --test
+      - name: Collect game files
+        run: |
+          mkdir _site
+          cp index.html *.js _site/
+          touch _site/.nojekyll
+          ls -la _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
