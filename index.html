@@ -2605,10 +2605,6 @@ function breakProp(pr, dx, dz){ // 거인 돌진에 소품이 부서짐: 충돌 
   }
   buildGrid(); flowCell = -1; sfx.crash(); shakeT = Math.max(shakeT, .4);
 }
-function startLeaps(e){ // 도약: 광폭화면 1~3번 연속
-  e.leapLeft = e.enraged ? 1 + Math.floor(Math.random()*3) : 1;
-  setBossState(e, 'leapPrep', e.enraged ? .45 : .6); sfx.bossCharge();
-}
 function bossHeadHit(e){ // 광폭화: 짧은 시간에 머리를 여러 번 맞으면 즉시 방패를 올려 튕겨냄
   if (!e.enraged || e.groggyT > 0 || e.kneelT > 0) return;
   const now = performance.now()/1000;
@@ -2659,156 +2655,54 @@ function updateThief(e, dt, p, dist){
   animateSoldier(e, dt, 99);
   if (e.flash > 0){ e.flash -= dt; tint(e, 0xffffff); } else tint(e, e.slowT > 0 ? 0x1c3a66 : 0x000000);
 }
-function setBossState(e, st, dur){
-  if (!['walk','deflect','recover','stun'].includes(st)) e.noDeflect = false; /* 다른 공격 패턴이 나오면 다시 방패 가능 */
-  e.state = st; e.st = 0; e.dur = dur; e.hitDone = false; }
+const {setBossState} = Enemies; // 보스 상태 전환 (enemies.js)
+// 보스(철의 거인): 상태 머신은 Enemies.bossStep(enemies.js)이 정하고, 여기서는 그리기와 효과만
+const BOSS_WORLD = {
+  hasLOS, flowDir: (x, z, px, pz, out) => flowDir(x, z, px, pz, out), collide: (p, r) => collide(p, r),
+  breakLanding(e){ // 착지 지점에 깔린 엄폐물을 부숨
+    const g = e.g;
+    for (const o of obstacles.slice()){
+      if (!o.prop || o.prop.broken) continue;
+      const cx = clamp(g.position.x, o.minX, o.maxX), cz = clamp(g.position.z, o.minZ, o.maxZ);
+      if (Math.hypot(g.position.x - cx, g.position.z - cz) < e.r + .5) breakProp(o.prop, Math.sin(e.yaw), Math.cos(e.yaw));
+    }
+  },
+  breakCharge(e){ // 돌진 경로를 막는 소품을 부숨 (성벽·탑은 못 부숨)
+    const g = e.g;
+    for (const o of obstacles.slice()){
+      if (!o.prop || o.prop.broken) continue;
+      const m = e.r + .2;
+      if (g.position.x > o.minX - m && g.position.x < o.maxX + m && g.position.z > o.minZ - m && g.position.z < o.maxZ + m) breakProp(o.prop, e.chargeDir.x, e.chargeDir.z);
+    }
+  },
+};
+const BOSS_FX = {
+  sfx: name => sfx[name](),
+  shake: v => { shakeT = Math.max(shakeT, v); },
+  shakeSet: v => { shakeT = v; },
+  hurt: attack => hurtPlayer(attack),
+  bashKnock(toYaw){ // 방패 밀치기에 맞음: 뒤로 날아감 (벽에 부딪히면 멈춤) + 둔화
+    kbVx = Math.sin(toYaw)*21; kbVz = Math.cos(toYaw)*21; vy = 7; onGround = false;
+    slowT = 2.5; showNotice('둔화!', 0x8fb8ff);
+  },
+  slow(){ slowT = 2.5; showNotice('둔화!', 0x8fb8ff); },
+  knock: (dir, amt) => knockPlayer(dir, amt),
+  crackRing: (x, z) => crackRing(x, z),
+  crackPath: (x, z, yaw) => crackPath(x, z, yaw, 8, .35, 0),
+  groundBurst: (x, z, n, sp) => groundBurst(x, z, n, sp),
+  sweepScrape(e){ // 칼끝이 땅에 닿은 구간을 따라 긁힌 자국 + 흙·불꽃
+    if (!e.swordTip) return;
+    e.swordTip.getWorldPosition(AV.t);
+    if (AV.t.y < 1.0){
+      if (e.lastTipX !== undefined && Math.hypot(AV.t.x - e.lastTipX, AV.t.z - e.lastTipZ) > .25){ crackSeg(e.lastTipX, e.lastTipZ, AV.t.x, AV.t.z, .28); groundBurst(AV.t.x, AV.t.z, 2, .3); sfx.scrape(); e.lastTipX = AV.t.x; e.lastTipZ = AV.t.z; }
+      else if (e.lastTipX === undefined){ e.lastTipX = AV.t.x; e.lastTipZ = AV.t.z; }
+    }
+  },
+};
 function updateBoss(e, dt, p, dist, canSee){
   const g = e.g;
-  e.st += dt; const k = Math.min(1, e.st/e.dur); e.stP = k;
-  const ER = e.enraged ? 1.7 : 1; // 광폭화: 쿨타임이 1.7배 빨리 돎
-  e.chargeCd -= dt*ER; e.comboCd -= dt*ER; e.deflectCd -= dt*ER;
-  const toYaw = Math.atan2(p.x - g.position.x, p.z - g.position.z);
-  const turnTo = (target, rate) => { let d = target - e.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); e.yaw += d*Math.min(1, dt*rate); };
-  const angTo = target => Math.abs(Math.atan2(Math.sin(target - toYaw), Math.cos(target - toYaw)));
-  let teleg = false;
-  switch (e.state){
-    case 'walk':
-      turnTo(toYaw, 3);
-      if (dist > 15 && canSee && e.chargeCd <= 0){ setBossState(e, 'chargePrep', 2.5); e.chargeCd = 9; sfx.bossCharge(); break; }
-      if (dist < 5.5 && e.comboCd <= 0){
-        e.comboCd = 6;
-        if (Math.random() < .35){ setBossState(e, 'bashPrep', .55); sfx.bossShield(); } // 가끔 방패 밀치기 → 도약으로 연계
-        else { setBossState(e, 'sweepPrep', .9); sfx.bossSwing(); }
-        break;
-      }
-      // 사각지대: 돌진 조건도 아니고 근접 범위도 아닌 곳에 오래 머물면 도약 내려찍기
-      if (!(dist > 15 && canSee && e.chargeCd <= 0)) e.limboT += dt; else e.limboT = 0;
-      if (e.limboT > (e.enraged ? 2.5 : 4)){ e.limboT = 0; startLeaps(e); break; }
-      if (e.deflectCd <= 0 && dist < 24 && canSee && !e.noDeflect){ setBossState(e, 'deflect', 3); e.deflectCd = 10 + Math.random()*5; sfx.bossShield(); break; }
-      if (dist > 3){
-        if (hasLOS(g.position.x, g.position.z, p.x, p.z, .6)) tmp.normalize(); else flowDir(g.position.x, g.position.z, p.x, p.z, tmp);
-        e.dir.lerp(tmp, Math.min(1, dt*4)).normalize();
-        const bslow = (e.slowT > 0 ? .5 : 1)*(e.buffT > 0 ? 1.4 : 1)*(e.enraged ? 1.25 : 1); g.position.x += e.dir.x*e.speed*bslow*dt; g.position.z += e.dir.z*e.speed*bslow*dt;
-      }
-      break;
-    case 'deflect': // 반사 중에는 제자리에 가만히
-      if (k >= 1){
-        setBossState(e, 'walk', 1); e.noDeflect = true; // 다음 패턴은 무조건 방패 말고 다른 것
-        if (e.quickGuard){ // 광폭화: 막자마자 곧바로 반격 (가까우면 바닥 쓸기, 멀면 준비 자세 없이 돌진)
-          e.quickGuard = false; e.yaw = toYaw;
-          if (dist < 6){ setBossState(e, 'sweep', .7); sfx.bossSwing(); e.lastTipX = undefined; }
-          else { e.chargeDir.set(Math.sin(e.yaw), 0, Math.cos(e.yaw)); e.chargeLeft = Math.min(32, dist + 6); setBossState(e, 'charge', 1.6); sfx.bossDash(); }
-        }
-      }
-      break;
-    case 'bashPrep': turnTo(toYaw, 6); if (k >= 1){ setBossState(e, 'bash', .28); e.bashHit = false; sfx.bossDash(); } break; // 방패를 뒤로 끌어당김
-    case 'bash': { // 한 발 내디디며 방패로 밀쳐 냄
-      g.position.x += Math.sin(e.yaw)*5*dt; g.position.z += Math.cos(e.yaw)*5*dt;
-      if (!e.hitDone && k >= .4){
-        e.hitDone = true;
-        if (dist < e.r + 3.2 && angTo(e.yaw) < .9 && footY < 2 && hurtPlayer({dmg: 15*edm(), kind: 'bossMelee', from: g.position, src: e}).landed){
-          const kx = Math.sin(toYaw), kz = Math.cos(toYaw), pp = yawObj.position;
-          kbVx = kx*21; kbVz = kz*21; vy = 7; onGround = false; // 뒤로 날아감 (벽에 부딪히면 멈춤)
-          slowT = 2.5; showNotice('둔화!', 0x8fb8ff); e.bashHit = true; sfx.clang(); shakeT = Math.max(shakeT, .4);
-        }
-      }
-      if (k >= 1) setBossState(e, 'bashEnd', .35);
-      break;
-    }
-    case 'bashEnd': if (k >= 1){ if (e.bashHit) startLeaps(e); else setBossState(e, 'recover', .8*(e.enraged ? .6 : 1)); } break;
-    case 'leapPrep': // 웅크렸다가 플레이어 쪽으로 짧게 도약
-      turnTo(toYaw, 5);
-      if (k >= 1){
-        const d = Math.min(Math.max(dist - 2.5, 2), 9);
-        e.leapFrom.set(g.position.x, 0, g.position.z);
-        e.leapTo.set(clamp(g.position.x + Math.sin(e.yaw)*d, -27, 27), 0, clamp(g.position.z + Math.cos(e.yaw)*d, -27, 27));
-        setBossState(e, 'leap', .75); sfx.bossDash();
-      }
-      break;
-    case 'leap': {
-      g.position.x = lerp(e.leapFrom.x, e.leapTo.x, k); g.position.z = lerp(e.leapFrom.z, e.leapTo.z, k);
-      e.leapY = Math.sin(k*Math.PI)*2.6;
-      if (k >= 1){ // 착지: 땅을 골라 주변 둔화, 깔린 엄폐물은 부서짐
-        e.leapY = 0;
-        for (const o of obstacles.slice()){
-          if (!o.prop || o.prop.broken) continue;
-          const cx = clamp(g.position.x, o.minX, o.maxX), cz = clamp(g.position.z, o.minZ, o.maxZ);
-          if (Math.hypot(g.position.x - cx, g.position.z - cz) < e.r + .5) breakProp(o.prop, Math.sin(e.yaw), Math.cos(e.yaw));
-        }
-        collide(g.position, e.r);
-        crackRing(g.position.x, g.position.z); sfx.bossStomp(); shakeT = Math.max(shakeT, .75);
-        const ld = Math.hypot(p.x - g.position.x, p.z - g.position.z);
-        if (ld < 9 && footY < .6 && rollT <= 0){ if (hurtPlayer({dmg: (ld < 3 ? 15 : 5)*edm(), kind: 'bossAoe', from: g.position, src: e}).landed){ // 도약 땅고르기는 패링 불가
-           slowT = 2.5; showNotice('둔화!', 0x8fb8ff); } }
-        if (e.leapLeft > 1){ e.leapLeft--; setBossState(e, 'leapPrep', .4); sfx.bossCharge(); } // 광폭화: 연속 도약
-        else setBossState(e, 'recover', e.enraged ? .6 : 1.0);
-      }
-      break;
-    }
-    case 'chargePrep': {
-      if (k < .85) turnTo(toYaw, 2.5);
-      const len = Math.min(32, dist + 6);
-      if (k >= 1){ e.chargeDir.set(Math.sin(e.yaw), 0, Math.cos(e.yaw)); e.chargeLeft = len; setBossState(e, 'charge', 1.6); sfx.bossDash(); }
-      break;
-    }
-    case 'charge': {
-      const step = (e.enraged ? 24 : 20)*dt, bx = g.position.x, bz = g.position.z;
-      g.position.x += e.chargeDir.x*step; g.position.z += e.chargeDir.z*step; e.chargeLeft -= step;
-      for (const o of obstacles.slice()){ // 앞을 막는 소품은 부수고 지나감 (성벽·탑은 못 부숨)
-        if (!o.prop || o.prop.broken) continue;
-        const m = e.r + .2;
-        if (g.position.x > o.minX - m && g.position.x < o.maxX + m && g.position.z > o.minZ - m && g.position.z < o.maxZ + m) breakProp(o.prop, e.chargeDir.x, e.chargeDir.z);
-      }
-      collide(g.position, e.r);
-      const ndist = Math.hypot(p.x - g.position.x, p.z - g.position.z);
-      if (!e.hitDone && ndist < e.r + 1.3 && footY < 2.5 && rollT <= 0){ e.hitDone = true; if (hurtPlayer({dmg: 35*edm(), kind: 'bossMelee', from: {x: bx, z: bz}, src: e}).landed) knockPlayer(e.chargeDir, 5); }
-      if (Math.hypot(g.position.x - bx, g.position.z - bz) < step*.4){ setBossState(e, 'stun', 1.8); sfx.bossBonk(); shakeT = .4; break; } // 벽에 부딪혀 기절
-      if (e.chargeLeft <= 0 || k >= 1) setBossState(e, 'recover', e.enraged ? .6 : 1.0);
-      break;
-    }
-    case 'stun': if (k >= 1) setBossState(e, 'walk', 1); break;
-    case 'recover': turnTo(toYaw, e.enraged ? 4 : 2); if (k >= 1) setBossState(e, 'walk', 1); break;
-    case 'sweepPrep': turnTo(toYaw, 5); if (k >= 1){ setBossState(e, 'sweep', .7); sfx.bossSwing(); e.lastTipX = undefined; } break;
-    case 'sweep': { // 바닥 쓸기: 앞쪽 넓은 범위, 공중에 있으면 피함
-      if (e.swordTip && k > .1){ // 칼끝이 땅에 닿은 구간을 따라 긁힌 자국 + 흙·불꽃
-        e.swordTip.getWorldPosition(AV.t);
-        if (AV.t.y < 1.0){
-          if (e.lastTipX !== undefined && Math.hypot(AV.t.x - e.lastTipX, AV.t.z - e.lastTipZ) > .25){ crackSeg(e.lastTipX, e.lastTipZ, AV.t.x, AV.t.z, .28); groundBurst(AV.t.x, AV.t.z, 2, .3); sfx.scrape(); e.lastTipX = AV.t.x; e.lastTipZ = AV.t.z; }
-          else if (e.lastTipX === undefined){ e.lastTipX = AV.t.x; e.lastTipZ = AV.t.z; }
-        }
-      }
-      if (!e.hitDone && k > .2 && k < .9 && dist < 6.5 && angTo(e.yaw) < 1.75 && footY < .35){ e.hitDone = true; hurtPlayer({dmg: 25*edm(), kind: 'bossMelee', from: g.position, src: e}); }
-      if (k >= 1){ setBossState(e, 'raise', .55); }
-      break;
-    }
-    case 'raise': turnTo(toYaw, 4); if (k >= 1){ e.slamYaw = toYaw; setBossState(e, 'stomp', .6); } break;
-    case 'stomp': // 발 구르기: 주변 둔화
-      turnTo(e.slamYaw, 8);
-      if (!e.hitDone && k >= .7){
-        e.hitDone = true; crackRing(g.position.x, g.position.z); sfx.bossStomp(); shakeT = Math.max(shakeT, .6);
-        if (dist < 9 && footY < .6 && rollT <= 0){ if (hurtPlayer({dmg: 5*edm(), kind: 'bossAoe', from: g.position, src: e}).landed){ // 발 구르기도 패링 불가
-           slowT = 2.5; showNotice('둔화!', 0x8fb8ff); } }
-      }
-      if (k >= 1) setBossState(e, 'hold', .65);
-      break;
-    case 'hold': if (k >= 1) setBossState(e, 'slam', .38); break; // 발 구른 뒤 대검을 든 채 잠깐 멈춤
-    case 'slam': // 내려찍기: 고정된 방향으로 땅을 가름
-      if (!e.hitDone && k >= .8){
-        e.hitDone = true; sfx.bossSlam(); shakeT = Math.max(shakeT, .75);
-        { const sx = g.position.x + Math.sin(e.slamYaw)*1.6, sz = g.position.z + Math.cos(e.slamYaw)*1.6;
-          crackPath(sx, sz, e.slamYaw, 8, .35, 0);                                  // 갈라지는 큰 금
-          for (let k=0;k<4;k++){ const t = 1.5 + k*2; groundBurst(g.position.x + Math.sin(e.slamYaw)*t, g.position.z + Math.cos(e.slamYaw)*t, 5, 1); } }
-        if (dist < 9.5 && angTo(e.slamYaw) < .4 && footY < 1.5) hurtPlayer({dmg: 40*edm(), kind: 'bossMelee', from: g.position, src: e});
-      }
-      if (k >= 1){
-        if (e.enraged && !e.slam2){ e.slam2 = true; setBossState(e, 'raise2', .45); } // 광폭화: 한 번 더 내려침
-        else { e.slam2 = false; setBossState(e, 'recover', e.enraged ? .7 : 1.1); }
-      }
-      break;
-    case 'raise2': turnTo(toYaw, 7); if (k >= 1){ e.slamYaw = toYaw; setBossState(e, 'slam', .34); sfx.bossSwing(); } break;
-  }
-  if (!teleg) bossTeleg.visible = false;
-  if (e.state !== 'charge' && e.state !== 'leap') collide(g.position, e.r);
+  tmp.copy(Enemies.bossStep(e, dt, {pos: g.position, player: p, dist, canSee, rng: Math.random, footY, rollT, edm: edm(), world: BOSS_WORLD, fx: BOSS_FX}));
+  bossTeleg.visible = false;
   g.position.y = e.state === 'leap' ? e.leapY : 0; g.rotation.set(0, e.yaw, 0);
   animateSoldier(e, dt, dist);
   if (e.shieldFx) e.shieldFx.material.opacity = e.state === 'deflect' ? .3 + .2*Math.sin(performance.now()/70) : 0;

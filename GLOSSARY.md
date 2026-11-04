@@ -105,6 +105,10 @@ _Avoid_: AI 클래스, controller
 **Separation** (밀어내기):
 겹친 적끼리 서로 밀어내는 것. 앞서 움직인 적을 기준으로 밀기 때문에 적 순서에 의존한다.
 
+**Boss state** (보스 상태):
+철의 거인의 현재 행동 단계 (`walk`, `chargePrep`, `charge`, `sweep`, `slam`, `leap`, `deflect`, `stun` 등 18개). 상태마다 지속 시간이 있고, 끝나면 다음 상태로 넘어간다.
+_Avoid_: phase, 패턴 (패턴은 여러 상태가 이어진 묶음)
+
 ### 적
 
 **Thief** (도둑):
