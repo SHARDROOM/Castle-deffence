@@ -3208,7 +3208,8 @@ function openDeflect(){ // 정밀 흘리기 창
 function startThrust(){ // 팔을 L자로 몸에 붙였다가 연속 찌르기 (공격 속도가 빠를수록 더 많이)
   const n = Armory.thrustCount(W, rateMul());
   // 찌를 곳: 조준점 주변 위·아래·좌·우로 조금씩 다르게 (보이는 동작만, 판정은 앞쪽 좁은 범위 그대로)
-  const aims = []; for (let i=0;i<n;i++){ const a = Math.random()*Math.PI*2, r = .05 + Math.random()*.2; aims.push({x:Math.cos(a)*r, y:Math.sin(a)*r*.75}); } // 6m 앞 조준점에서 5~25cm
+  const aims = [], a0 = Math.random()*Math.PI*2; // 조준점을 둘러싼 고리 위 여기저기 (화면 기준, 연달아 같은 쪽을 찌르지 않게 각도를 고루 나눔)
+  for (let i=0;i<n;i++){ const a = a0 + (i + Math.random()*.6)*2.4, r = .09 + Math.random()*.15; aims.push({x:Math.cos(a)*r, y:Math.sin(a)*r*.9}); }
   thrust = {n, i: 0, t: 0, aims}; fireCd = THRUST_DUR;
   thrustFrom = {x:SWC.x, y:SWC.y, z:SWC.z, q:SWC.q.clone()};
 }
@@ -3620,12 +3621,17 @@ function animateSword(dt, dip){
     const kk = knockAmt(); T = poseDir(.02 + kk*.03, -.24 + kk*.03, -.5, [kk*.15, 1, -.08], [1, 0, 0]);
   } else if (guarding && !sheathParry){ // 발도 가드: 칼을 가로로 눕혀 들고, 왼손등으로 칼등을 받침 (막을 때마다 살짝 튕김)
     const kk = knockAmt(); T = {x:.12 + kk*.04, y:-.1 + kk*.04, z:-.46, rx:-.12 - kk*.15, ry:0, rz:1.5 + kk*.3 + Math.sin(performance.now()/90)*.008};
-  } else if (thrust){ // 레이피어 연속 찌르기: 팔은 오른쪽 아래에서 왼쪽 위로 뻗어 손을 끌어당겼다가, 칼끝으로 조준점을 곧게 찌름
+  } else if (thrust){ // 레이피어 연속 찌르기: 팔은 오른쪽 아래에서 왼쪽 위로 뻗어 손을 끌어당겼다가, 조준점 주변 여기저기를 칼끝으로 찌름
     const per = THRUST_DUR/thrust.n, i = Math.min(thrust.n - 1, Math.floor(thrust.t/per)), k = Math.min(1, (thrust.t - i*per)/per);
-    const aim = thrust.aims[i], tx = aim.x, ty = aim.y, tz = -6;                       // 찌를 곳: 조준점(6m 앞) 바로 주변
-    const toAim = (hx, hy, hz) => [tx - hx, ty - hy, tz - hz];
-    const L = poseDir(-.26, .02, -.46, toAim(-.26, .02, -.46), [0, 1, 0]);             // 당김: 손은 왼쪽 위, 칼끝은 조준점
-    const X = poseDir(-.08, -.01, -.8, toAim(-.08, -.01, -.8), [0, 1, 0]);              // 뻗음: 조준점 쪽으로 곧게
+    // 칼끝이 화면의 찌를 곳(조준점 주변 고리 위의 한 점)에 정확히 오도록, 칼 길이로 거꾸로 계산해 칼 방향을 정함
+    const aim = thrust.aims[i], bl = (.19 + 1.05*(W.bladeScale || 1) + .075)*.8; // 칼끝까지 길이 (모델 0.8배)
+    const tipDir = (hx, hy, hz) => { // 손에서 시작해 칼끝이 (aim.x, aim.y, -1) 시선 위에 오는 방향
+      const ux = aim.x, uy = aim.y, uz = -1, uu = ux*ux + uy*uy + 1, uh = ux*hx + uy*hy + uz*hz, hh = hx*hx + hy*hy + hz*hz;
+      const D = (uh + Math.sqrt(Math.max(0, uh*uh - uu*(hh - bl*bl))))/uu;
+      return [ux*D - hx, uy*D - hy, uz*D - hz];
+    };
+    const L = poseDir(-.26, .02, -.46, tipDir(-.26, .02, -.46), [0, 1, 0]);            // 당김: 손은 왼쪽 위
+    const X = poseDir(-.05, -.085, -.78, tipDir(-.05, -.085, -.78), [0, 1, 0]);          // 뻗음: 칼끝이 찌를 곳에 (손은 조준점보다 조금 아래라 고리를 가리지 않음)
     T = thrust.t < per*.2 && i === 0 ? lerpPose(thrustFrom || L, L, thrust.t/(per*.2)) : keyPose([[0, L], [.35, X], [.55, X], [1, L]], k); snap = true;
   } else if (rapierFlickT > 0){ // 정밀 흘리기: 날로 상대 공격을 바깥으로 살짝 빗겨 쳐냄
     const k = 1 - rapierFlickT/.22;
