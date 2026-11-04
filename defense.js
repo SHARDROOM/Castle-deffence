@@ -11,19 +11,21 @@
   // ---------- 공격 종류별 정책 ----------
   // fx:        피격 연출 종류 ('heavy' = 크게 흔들림, 'melee', 'arrow')
   // parryable: 패리할 수 있는가 (가드는 항상 된다)
-  // range:     패리 사거리 확인 방식. 'src' = 공격자 위치 − 공격자 반지름, 'none' = 사거리 무시
-  // stage:     판정 순서. 공격 종류마다 지금 코드의 순서를 그대로 보존한다.
-  //   'core'       구르기·처형 → (아드레날린) → 가드 → 패리
-  //   'meleeFirst' 가드 중이 아니고 패리 창·사거리 안이면 먼저 패리. 아니면 core (패리 불가로)
-  //   'arrow'      구르기 회피 → 패리·가드면 되돌림(가드는 core로 피해) → core
-  //   'bullet'     보스가 살아 있고 패리·가드면 되돌림(가드는 core로 피해) → 구르기면 회피 → core
+  // range:     패리 사거리 확인 방식
+  //   'src'        공격자 위치 − 공격자 반지름이 패리 사거리 안
+  //   'projectile' 패리를 누른 순간 투사체가 패리 사거리 안에 있었음 (attack.inParryRange)
+  // stage:     판정 순서. 구르는 중에는 어떤 공격도 패리하지 않는다 (#9).
+  //   'core'       구르기·처형 → 가드 → 패리 → (아드레날린)
+  //   'meleeFirst' 구르기 → 가드 중이 아니고 패리 창·사거리 안이면 패리 (처형 중에도) → core (패리 불가로)
+  //   'arrow'      구르기 회피(표시) → 가드면 되돌림(줄어든 피해) → 사거리 안 패리면 되돌림 → core
+  //   'bullet'     구르기 → 보스가 살아 있으면: 가드면 되돌림(줄어든 피해), 사거리 안 패리면 되돌림 → core
   const P = (o) => Object.assign({ fx: 'heavy', parryable: true, range: 'src', stage: 'core' }, o);
   const KINDS = {
     bossMelee: P({}),                                                       // 방패 치기, 돌진, 휩쓸기, 내려치기
     bossAoe: P({ parryable: false }),                                       // 도약 착지, 발 구르기
     soldierMelee: P({ fx: 'melee', parryable: false, stage: 'meleeFirst' }), // 병사 근접 공격
-    arrow: P({ fx: 'arrow', range: 'none', stage: 'arrow' }),               // 궁수 화살
-    bullet: P({ fx: 'arrow', range: 'none', stage: 'bullet' }),             // 거인 방패에 튕겨 나온 총알
+    arrow: P({ fx: 'arrow', range: 'projectile', stage: 'arrow' }),         // 궁수 화살
+    bullet: P({ fx: 'arrow', range: 'projectile', stage: 'bullet' }),       // 거인 방패에 튕겨 나온 총알
   };
 
   // 지키는 자 가드의 피해 감소율: 패리 강도 100당 30%, 최소 5%, 최대 60%. 패리 강도 0은 100으로 친다.
@@ -44,24 +46,34 @@
 
   const result = (o) => Object.assign({
     outcome: 'hit', damage: 0, landed: false, parried: false, parryTarget: null,
-    guardBlocked: 0, returnProjectile: false, showDodge: false,
+    guardBlocked: 0, returnProjectile: false, showDodge: false, resistDebuff: false,
   }, o);
 
-  // 구르기·처형 → 아드레날린 → 가드 → 패리 → 피격 (리팩터 전 hurt와 같은 순서)
+  // 아드레날린: 받는 피해 30% 감소. 가드로 막은 양(반격 위력)은 줄이지 않도록 가드 다음에 적용 (#9)
+  const adren = (n, d) => d.adrenT > 0 ? n * .7 : n;
+
+  // 패리 사거리 안인가
+  function inParryRange(attack, d, p) {
+    if (p.range === 'projectile') return !!attack.inParryRange;
+    return !attack.from || reachOf(attack, d) <= d.parryRange;
+  }
+
+  // 구르기·처형 → 가드 → 패리 → 피격 (아드레날린은 가드 다음)
   function core(attack, d, p, parryable, extra) {
     if (d.rollT > 0) return result(Object.assign({ outcome: 'dodged' }, extra));
     if (d.inExec) return result(Object.assign({ outcome: 'immune' }, extra));
     let n = attack.dmg;
-    if (d.adrenT > 0) n *= .7; // 아드레날린: 받는 피해 감소
     if (d.guarding) { // 가드: 패리 대신 피해 감소
       const b = n * guardReduction(d.parryPow);
-      n -= b;
-      if (n < .01) return result(Object.assign({ outcome: 'guarded', guardBlocked: b }, extra));
-      return result(Object.assign({ outcome: 'guarded', guardBlocked: b, damage: n, landed: true }, extra));
+      n = adren(n - b, d);
+      // 지키는 자 + 대검으로 가드하면 넉백·둔화를 버팀 (resistDebuff)
+      const g = { outcome: 'guarded', guardBlocked: b, resistDebuff: !!d.guardResist };
+      if (n < .01) return result(Object.assign(g, extra));
+      return result(Object.assign(g, { damage: n, landed: true }, extra));
     }
+    n = adren(n, d);
     if (d.parryT > 0 && parryable) {
-      const reach = p.range === 'none' || !attack.from ? 0 : reachOf(attack, d);
-      if (reach <= d.parryRange) { // 패리 사거리 안의 공격만 받아냄
+      if (inParryRange(attack, d, p)) { // 패리 사거리 안의 공격만 받아냄
         const parried = { outcome: 'parried', parried: true, parryTarget: attack.src || null };
         if (!attack.pow || d.parryPow >= attack.pow) return result(Object.assign(parried, extra));
         // 패리 강도가 모자라면 패리는 되지만 피해 일부(60%)가 들어옴
@@ -72,13 +84,16 @@
   }
 
   // 공격 하나를 판정한다.
-  //   attack:   {dmg, kind, from?: {x, z}, src?, srcR?, dist?, pow?, canReturn?}
+  //   attack:   {dmg, kind, from?: {x, z}, src?, srcR?, dist?, pow?, canReturn?, inParryRange?}
   //             src = 패리 성공 시 비틀거릴 적, srcR = 그 적의 반지름,
-  //             dist = 미리 잰 거리 (없으면 from으로 계산), canReturn = 반사탄을 되돌릴 보스가 있는가
-  //   defender: {x, z, rollT, inExec, adrenT, guarding, parryT, parryRange, parryPow}
+  //             dist = 미리 잰 거리 (없으면 from으로 계산), canReturn = 반사탄을 되돌릴 보스가 있는가,
+  //             inParryRange = (투사체) 패리를 누른 순간 패리 사거리 안에 있었는가
+  //   defender: {x, z, rollT, inExec, adrenT, guarding, guardResist, parryT, parryRange, parryPow}
+  //             guardResist = 가드하면 넉백·둔화를 버티는 조합인가 (지키는 자 + 대검)
   //   반환:     {outcome: 'dodged'|'immune'|'parried'|'guarded'|'hit', damage, landed, fx,
-  //             parried, parryTarget, guardBlocked, returnProjectile, showDodge}
+  //             parried, parryTarget, guardBlocked, returnProjectile, showDodge, resistDebuff}
   //             landed = 실제로 피해가 들어갔는가 (보스 넉백·둔화 조건)
+  //             resistDebuff = 맞았지만 넉백·둔화는 걸지 않음
   function resolve(attack, d) {
     const p = policyOf(attack.kind);
     const r = resolveStage(attack, d, p);
@@ -89,23 +104,22 @@
   function resolveStage(attack, d, p) {
     switch (p.stage) {
       case 'meleeFirst':
+        if (d.rollT > 0) return result({ outcome: 'dodged' });
         if (!d.guarding && d.parryT > 0 && reachOf(attack, d) <= d.parryRange) {
           return result({ outcome: 'parried', parried: true, parryTarget: attack.src || null });
         }
         return core(attack, d, p, false);
       case 'arrow':
         if (d.rollT > 0) return result({ outcome: 'dodged', showDodge: true });
-        if (d.parryT > 0 || d.guarding) {
-          if (d.guarding) return core(attack, d, p, p.parryable, { returnProjectile: true });
-          return result({ outcome: 'parried', parried: true, parryTarget: null, returnProjectile: true });
-        }
+        if (d.guarding) return core(attack, d, p, p.parryable, { returnProjectile: true });
+        if (d.parryT > 0 && attack.inParryRange) return result({ outcome: 'parried', parried: true, parryTarget: null, returnProjectile: true });
         return core(attack, d, p, p.parryable);
       case 'bullet':
-        if ((d.parryT > 0 || d.guarding) && attack.canReturn) {
-          if (d.guarding) return core(attack, d, p, p.parryable, { returnProjectile: true });
-          return result({ outcome: 'parried', parried: true, parryTarget: null, returnProjectile: true });
-        }
         if (d.rollT > 0) return result({ outcome: 'dodged' });
+        if (attack.canReturn) {
+          if (d.guarding) return core(attack, d, p, p.parryable, { returnProjectile: true });
+          if (d.parryT > 0 && attack.inParryRange) return result({ outcome: 'parried', parried: true, parryTarget: null, returnProjectile: true });
+        }
         return core(attack, d, p, p.parryable);
       default:
         return core(attack, d, p, p.parryable);

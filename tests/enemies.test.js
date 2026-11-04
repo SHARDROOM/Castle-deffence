@@ -273,6 +273,25 @@ test('보스 bash: 맞으면 뒤로 날려 보내고, 끝나면 도약으로 이
   assert.equal(e.state, 'leapPrep');
 });
 
+test('보스: 지키는 자 + 대검 가드로 버티면(resistDebuff) 피해만 받고 넉백·둔화 없음', () => {
+  // 방패 밀치기
+  const a = boss({ state: 'bash', dur: .28, st: .12 }), ca = bossCtx(a, { x: 0, z: 0 }, { x: 0, z: 2 });
+  ca.fx.hurt = at => { ca.calls.push(['hurt', at.kind]); return { landed: true, resistDebuff: true }; };
+  Enemies.bossStep(a, 0.01, ca);
+  assert.deepEqual(ca.calls.map(c => c[0]), ['hurt', 'sfx', 'shake']); assert.equal(a.bashHit, true);
+  // 돌진
+  const c = boss({ state: 'charge', dur: 1.6, chargeLeft: 30 }); c.chargeDir.set(0, 0, 1);
+  const cc = bossCtx(c, { x: 0, z: 0 }, { x: 0, z: 1.5 });
+  cc.fx.hurt = () => ({ landed: true, resistDebuff: true });
+  Enemies.bossStep(c, 0.05, cc);
+  assert.ok(!cc.calls.some(x => x[0] === 'knock'));
+  // 도약 착지
+  const l = boss({ state: 'leap', dur: .75, st: .74, leapFrom: V3(), leapTo: V3() }), cl = bossCtx(l, { x: 0, z: 0 }, { x: 0, z: 2 });
+  cl.fx.hurt = () => ({ landed: true, resistDebuff: true });
+  Enemies.bossStep(l, 0.05, cl);
+  assert.ok(!cl.calls.some(x => x[0] === 'slow'));
+});
+
 test('보스 bash: 빗나가면 bashEnd 후 recover', () => {
   const e = boss({ state: 'bash', dur: .28, st: .12 }), pos = { x: 0, z: 0 };
   Enemies.bossStep(e, 0.01, bossCtx(e, pos, { x: 0, z: 2 }, { landed: false }));

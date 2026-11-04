@@ -2738,7 +2738,7 @@ function resetSword(){
   skillG = 0; skillPh = null; waves.forEach(wv => scene.remove(wv.g)); waves.length = 0;
   sheathT = 0; swordOut = false; drawT = 0; pendingSwing = false; greatRel = null; sheathPlant = false; guarding = false; parryHeld = false; guardSlashQ = null; guardBlocked = 0;
   swingT = 0; swordHitT = 0; parryT = 0; parryCd = 0; exec = null; rageT = 0; hitStopT = 0;
-  parryBuf = 0; parryHoldT = 0; parryHealed = false; parryHit = false; knockT = 0; sheathParry = false; swordIdleT = 0; // 패리 입력 예약·튕겨남 자세
+  parryBuf = 0; parrySeq = 0; parryHoldT = 0; parryHealed = false; parryHit = false; knockT = 0; sheathParry = false; swordIdleT = 0; // 패리 입력 예약·튕겨남 자세
   slashes.forEach(sl => camera.remove(sl.m)); slashes.length = 0;
 }
 function slashFx(angle, ox, oy, len, white){ // 화면에 남는 칼자국
@@ -3140,6 +3140,7 @@ function knockAdd(P, a){ // a: 0~1 쳐내는 정도
 }
 const knockAmt = () => knockT > 0 ? (() => { const k = 1 - knockT/KNOCK_DUR; return k < .35 ? ease(k/.35) : 1 - smooth((k - .35)/.65); })() : 0;
 const withVar = P => knockAdd({x:P.x + parryVar.dx, y:P.y + parryVar.dy, z:P.z, rx:P.rx + parryVar.rx, ry:P.ry + parryVar.ry, rz:P.rz + parryVar.rz}, knockAmt());
+let parrySeq = 0; // 패리를 누를 때마다 1씩: 그 순간 패리 사거리 안에 있던 투사체에 이 번호를 남김
 let parryBuf = 0; // 패링 입력 예약: 쿨타임 중에 누르면 잠깐 기억했다가, 패링에 성공해 쿨타임이 풀리는 순간 바로 다시 패링
 // ---------- 지키는 자: 패링을 길게 누르면 가드 → 놓으면 막아낸 피해만큼 앞쪽 반원을 여러 번 벰 ----------
 let parryHeld = false, parryHoldT = 0, guarding = false, guardBlocked = 0, guardSlashQ = null;
@@ -3223,6 +3224,10 @@ function parry(){
   parryVar = {dx:v0.dx + j()*.3, dy:v0.dy + j()*.3, rx:v0.rx + j(), ry:v0.ry + j(), rz:v0.rz + j()};
   if (swordOut) drawSword(); else { sheathParry = true; swordIdleT = 0; } // 칼집에 넣은 상태면 칼집째로 들어 막음 (대검은 등에서 칼집째 앞으로 가져와 막음)
   parryT = W.parryWin || PARRY_WIN; parryCd = W.parryCd || PARRY_CD; parryHealed = false; parryHit = false; swingT = 0; sfx.parryStart(); updateHUD();
+  // 투사체는 누른 순간 패리 사거리 안에 있던 것만 받아낼 수 있음 (너무 일찍 누르면 실패)
+  parrySeq++; const pp = yawObj.position, pr = W.parryRange || 99;
+  for (const s of shots) if (!s.ret && !s.stuck && s.m.position.distanceTo(pp) <= pr) s.parryWin = parrySeq;
+  for (const b of rbullets) if (!b.ret && b.m.position.distanceTo(pp) <= pr) b.parryWin = parrySeq;
 }
 function parrySparks(){ // 칼끼리 부딪힌 자리(화면 앞쪽)에서 빨강·노랑 불꽃이 튐
   const fwd = new THREE.Vector3(), cp = new THREE.Vector3();
@@ -3263,10 +3268,10 @@ function returnArrow(s){
   s.m.lookAt(s.m.position.clone().add(s.v));
 }
 function groggyPose(e, dt){
-  e.vs = 0; e.blend = 0; e.t += dt;
+  e.vs = 0; e.blend = 0; // e.t는 루프에서 한 번만 흐름 (전에는 여기서 한 번 더 더해져 2배였음)
   e.thighL.rotation.set(-.15,0,0); e.thighR.rotation.set(.1,0,0); e.kneeL.rotation.set(.35,0,0); e.kneeR.rotation.set(.25,0,0);
-  e.rig.position.set(0, .84, 0); e.rig.rotation.set(0, 0, Math.sin(e.t*3)*.12);
-  e.chest.rotation.set(.45, 0, 0); e.neck.rotation.set(.4, Math.sin(e.t*2)*.3, 0);
+  e.rig.position.set(0, .84, 0); e.rig.rotation.set(0, 0, Math.sin(e.t*6)*.12);
+  e.chest.rotation.set(.45, 0, 0); e.neck.rotation.set(.4, Math.sin(e.t*4)*.3, 0);
   e.armL.rotation.set(.15,0,-.25); e.armR.rotation.set(.15,0,.25); e.foreL.rotation.set(-.2,0,0); e.foreR.rotation.set(-.2,0,0);
   if (e.nock) e.nock.visible = false;
   if (!e.stars){ // 머리 위에 빙글빙글 도는 별
@@ -3619,7 +3624,7 @@ const hitDir = {top:0, bottom:0, left:0, right:0};
 const edm = () => Math.min(3, 1 + .06*(wave - 1)); // 적 공격력 배율: 웨이브마다 +6% (최대 3배)
 function defenderState(){ // Defense가 읽는 플레이어 방어 상태
   const p = yawObj.position;
-  return { x: p.x, z: p.z, rollT, inExec: !!exec, adrenT, guarding, parryT,
+  return { x: p.x, z: p.z, rollT, inExec: !!exec, adrenT, guarding, guardResist: !!(W.great && W.guardian), parryT,
     parryRange: W.parryRange || 99, parryPow: effParryPow() };
 }
 // 플레이어가 공격을 받는다. attack = {dmg, kind, from, src, dist, pow, canReturn} (defense.js 참고)
@@ -4691,7 +4696,7 @@ function update(dt){
     let hitMe = ax*ax + az*az < 0.2 && ay > footY + 0.1 && ay < footY + 1.85;
     let ar = null;
     if (hitMe){
-      ar = hurtPlayer({dmg: 10*edm(), kind: 'arrow', from: {x: s.fx, z: s.fz}});
+      ar = hurtPlayer({dmg: 10*edm(), kind: 'arrow', from: {x: s.fx, z: s.fz}, inParryRange: s.parryWin === parrySeq});
       if (ar.showDodge){ if (!s.dodged){ s.dodged = true; showDodge(); } hitMe = false; } // 구르기로 피함: 화살은 계속 날아감
     }
     if (hitMe && ar.returnProjectile) returnArrow(s); // 패링·가드: 튕겨냄 (가드는 줄어든 피해를 받음)
@@ -4710,7 +4715,7 @@ function update(dt){
       if (q.y < 0 || insideBox(q)){ dead = true; break; }
       if (!b.ret && Math.hypot(q.x - p.x, q.z - p.z) < .45 && q.y > footY + .1 && q.y < footY + 1.85){
         const bs = enemies.find(o => o.boss);
-        const br = hurtPlayer({dmg: b.dmgP, kind: 'bullet', from: {x: q.x - b.v.x, z: q.z - b.v.z}, canReturn: !!bs});
+        const br = hurtPlayer({dmg: b.dmgP, kind: 'bullet', from: {x: q.x - b.v.x, z: q.z - b.v.z}, canReturn: !!bs, inParryRange: b.parryWin === parrySeq});
         if (br.returnProjectile){ // 패링(또는 가드): 거인에게 되돌려 보냄
           b.ret = true; b.life = 1.5;
           b.v.set(bs.g.position.x - q.x, bs.ch - q.y, bs.g.position.z - q.z).normalize().multiplyScalar(38);

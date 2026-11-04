@@ -158,6 +158,9 @@
     setBossState(e, 'leapPrep', e.enraged ? .45 : .6); fx.sfx('bossCharge');
   }
 
+  // 맞았고, 가드로 버티지 않았으면 넉백·둔화를 건다 (지키는 자 + 대검 가드는 버팀)
+  const debuffs = r => r.landed && !r.resistDebuff;
+
   // 보스 상태 머신 한 프레임.
   //   ctx = {pos, player:{x,z}, dist, canSee, rng, footY, rollT, edm,
   //          world:{hasLOS, flowDir, collide, breakLanding(e), breakCharge(e)},
@@ -214,8 +217,12 @@
         g.x += Math.sin(e.yaw) * 5 * dt; g.z += Math.cos(e.yaw) * 5 * dt;
         if (!e.hitDone && k >= .4) {
           e.hitDone = true;
-          if (dist < e.r + 3.2 && angTo(e.yaw) < .9 && footY < 2 && fx.hurt({ dmg: 15 * ctx.edm, kind: 'bossMelee', from: g, src: e }).landed) {
-            fx.bashKnock(toYaw); e.bashHit = true; fx.sfx('clang'); fx.shake(.4); // 뒤로 날아가고 둔화
+          if (dist < e.r + 3.2 && angTo(e.yaw) < .9 && footY < 2) {
+            const r = fx.hurt({ dmg: 15 * ctx.edm, kind: 'bossMelee', from: g, src: e });
+            if (r.landed) {
+              if (debuffs(r)) fx.bashKnock(toYaw); // 뒤로 날아가고 둔화
+              e.bashHit = true; fx.sfx('clang'); fx.shake(.4);
+            }
           }
         }
         if (k >= 1) setBossState(e, 'bashEnd', .35);
@@ -241,7 +248,7 @@
           fx.crackRing(g.x, g.z); fx.sfx('bossStomp'); fx.shake(.75);
           const ld = Math.hypot(p.x - g.x, p.z - g.z);
           if (ld < 9 && footY < .6 && ctx.rollT <= 0) { // 도약 땅고르기는 패링 불가
-            if (fx.hurt({ dmg: (ld < 3 ? 15 : 5) * ctx.edm, kind: 'bossAoe', from: g, src: e }).landed) fx.slow();
+            if (debuffs(fx.hurt({ dmg: (ld < 3 ? 15 : 5) * ctx.edm, kind: 'bossAoe', from: g, src: e }))) fx.slow();
           }
           if (e.leapLeft > 1) { e.leapLeft--; setBossState(e, 'leapPrep', .4); fx.sfx('bossCharge'); } // 광폭화: 연속 도약
           else setBossState(e, 'recover', e.enraged ? .6 : 1.0);
@@ -262,7 +269,7 @@
         const ndist = Math.hypot(p.x - g.x, p.z - g.z);
         if (!e.hitDone && ndist < e.r + 1.3 && footY < 2.5 && ctx.rollT <= 0) {
           e.hitDone = true;
-          if (fx.hurt({ dmg: 35 * ctx.edm, kind: 'bossMelee', from: { x: bx, z: bz }, src: e }).landed) fx.knock(e.chargeDir, 5);
+          if (debuffs(fx.hurt({ dmg: 35 * ctx.edm, kind: 'bossMelee', from: { x: bx, z: bz }, src: e }))) fx.knock(e.chargeDir, 5);
         }
         if (Math.hypot(g.x - bx, g.z - bz) < step * .4) { setBossState(e, 'stun', 1.8); fx.sfx('bossBonk'); fx.shakeSet(.4); break; } // 벽에 부딪혀 기절
         if (e.chargeLeft <= 0 || k >= 1) setBossState(e, 'recover', e.enraged ? .6 : 1.0);
@@ -282,7 +289,7 @@
         if (!e.hitDone && k >= .7) {
           e.hitDone = true; fx.crackRing(g.x, g.z); fx.sfx('bossStomp'); fx.shake(.6);
           if (dist < 9 && footY < .6 && ctx.rollT <= 0) {
-            if (fx.hurt({ dmg: 5 * ctx.edm, kind: 'bossAoe', from: g, src: e }).landed) fx.slow();
+            if (debuffs(fx.hurt({ dmg: 5 * ctx.edm, kind: 'bossAoe', from: g, src: e }))) fx.slow();
           }
         }
         if (k >= 1) setBossState(e, 'hold', .65);
