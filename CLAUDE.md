@@ -23,7 +23,7 @@ Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/ag
 - `waves.js`: the wave director. Decides wave composition, the clear delay and thief spawns on game time, and returns commands that `index.html` executes.
 - `enemies.js`: soldier behaviour (movement, kiting, dodge rolls, melee and shooting) for regular enemies. Navigation and effects are injected; rendering stays in `index.html`. Also the boss (Iron Giant) state machine (`Enemies.bossStep`), the thief (`thiefStep`) and the airship (`airshipStep`).
 - Tests: `node --test` (Node 18+, no dependencies)
-- Script versions: `index.html` loads each local script as `name.js?v=<content hash>` so browsers and GitHub Pages never mix a new `index.html` with an old module. After changing any of the local `.js` files, run `node tools/asset-version.js --write` (`node --test` fails until you do).
+- Versions: `index.html` loads each local script as `name.js?v=<content hash>` so browsers and GitHub Pages never mix a new `index.html` with an old module, and shows a build version at the bottom left (`#buildVer`, `v<date> · <hash of index.html + scripts>`). After changing `index.html` or any local `.js` file, run `node tools/asset-version.js --write` (`node --test` fails until you do).
 - Browser check for new-run resets: `node tests/browser/run-reset.js` (needs Playwright; not part of `node --test`). Set `THREE_JS=<path to three.min.js r128>` when the CDN is unreachable.
 
 ## Run state

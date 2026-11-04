@@ -188,6 +188,9 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 .lvSub{margin:0 0 16px!important}
 #rerollBtn{font-family:"Gothic A1",sans-serif;font-weight:700;font-size:15px;padding:11px 24px;background:transparent;color:var(--ink);border:1.5px solid rgba(255,244,230,.5)}
 #rerollBtn:disabled{opacity:.35}
+#buildVer{left:calc(env(safe-area-inset-left,0px) + 8px);bottom:calc(env(safe-area-inset-bottom,0px) + 5px);font-size:10px;letter-spacing:.02em;opacity:.5;z-index:6;font-family:ui-monospace,Menlo,monospace} /* 왼쪽 아래 빌드 버전 */
+#shopStage{touch-action:none;cursor:grab} #shopStage.drag{cursor:grabbing}
+#shopHint{position:absolute;left:14px;top:38px;font-size:11px;opacity:.5;pointer-events:none}
 #xpWrap{left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 8px);width:min(44vw,360px);display:flex;align-items:center;gap:8px}
 #xpLv{font-family:"Black Han Sans",sans-serif;font-size:15px;text-shadow:0 1px 0 rgba(0,0,0,.4);white-space:nowrap}
 .xpbar{flex:1;height:8px;border-radius:4px;background:rgba(0,0,0,.45);border:1px solid rgba(255,244,230,.35);overflow:hidden}
@@ -233,6 +236,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
+<div id="buildVer" class="hud">v2026.11.04 · e840ac</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -288,7 +292,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
   <div class="shopTop"><h2>상점</h2><div id="shopGold">0 G</div><button id="shopClose">닫기</button></div>
   <div class="shopTabs"><button data-tab="parts" class="on">무기 개조</button><button data-tab="items">회복템</button></div>
   <div id="itemsPanel" class="hide"></div>
-  <div id="shopStage"><div id="slotLayer"></div><div id="shopGunName"></div></div>
+  <div id="shopStage"><div id="slotLayer"></div><div id="shopGunName"></div><div id="shopHint">드래그해서 돌려 보기 · 두 번 눌러 원래대로</div></div>
   <div class="shopBottom"><div id="shopList"></div><div id="shopStats"></div></div>
 </div></div>
 <div id="over" class="screen hide"><div class="inner">
@@ -4302,8 +4306,42 @@ function rebuildShopGun(){ // 가운데 큰 총: 지금 미리보기 중인 부�
   const len = Math.max(size.x, size.y, size.z)*1.25, fovH = 2*Math.atan(Math.tan(shopCam.fov*Math.PI/360)*shopCam.aspect);
   const dist = Math.max(len*1.08/2/Math.tan(fovH/2), (size.y*2.6)/2/Math.tan(shopCam.fov*Math.PI/360));
   shopCam.position.set(dist, dist*.08, 0); shopCam.lookAt(0, 0, 0);
+  shopView.camBase = dist; applyShopView(0); // 돌려 보던 각도·확대는 부품을 바꿔도 유지
 }
 const SLOT_TOP = {scope:1, conv:1, stock:1, soul:1, blade:1, skill:1, ammo:1, supp:1, side:1};
+// ---------- 상점 미리보기: 드래그로 돌려 보기, 휠·두 손가락으로 확대, 두 번 눌러 원래대로 ----------
+const shopView = {yaw:0, pitch:0, zoom:1, touched:false, camBase:null};
+function resetShopView(){ shopView.yaw = 0; shopView.pitch = 0; shopView.zoom = 1; shopView.touched = false; }
+function applyShopView(dt){ // 건드리기 전엔 살짝 흔들리고, 건드린 뒤엔 돌려 둔 그대로
+  if (!shopGun) return;
+  const sway = shopView.touched ? 0 : Math.sin(shopT*.6)*.16;
+  shopGun.rotation.set(shopView.pitch, shopView.yaw + sway, 0, 'YXZ');
+  if (shopView.camBase){ const d = shopView.camBase*shopView.zoom; shopCam.position.set(d, d*.08, 0); shopCam.lookAt(0, 0, 0); }
+}
+{
+  const st = $('shopStage'), ptrs = new Map(); let pinch = 0, lastTap = 0;
+  st.addEventListener('pointerdown', e => {
+    if (e.target.closest('.slotBtn')) return;           // 칸 버튼은 그대로 누름
+    try { st.setPointerCapture(e.pointerId); } catch (er) {}
+    ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY}); st.classList.add('drag');
+    if (ptrs.size === 2){ const [a, b] = [...ptrs.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
+    const now = performance.now(); if (ptrs.size === 1 && now - lastTap < 300){ resetShopView(); lastTap = 0; } else lastTap = now; // 두 번 누르기
+  });
+  st.addEventListener('pointermove', e => {
+    const p = ptrs.get(e.pointerId); if (!p) return;
+    if (ptrs.size === 1){ // 한 손가락·마우스: 돌리기
+      shopView.yaw += (e.clientX - p.x)*.012; shopView.pitch = clamp(shopView.pitch + (e.clientY - p.y)*.012, -1.2, 1.2); shopView.touched = true;
+    }
+    p.x = e.clientX; p.y = e.clientY;
+    if (ptrs.size === 2){ // 두 손가락: 확대·축소
+      const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch > 0){ shopView.zoom = clamp(shopView.zoom*pinch/d, .45, 1.6); shopView.touched = true; } pinch = d;
+    }
+  });
+  const up = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = 0; if (!ptrs.size) st.classList.remove('drag'); };
+  st.addEventListener('pointerup', up); st.addEventListener('pointercancel', up);
+  st.addEventListener('wheel', e => { e.preventDefault(); shopView.zoom = clamp(shopView.zoom*Math.exp(e.deltaY*.0012), .45, 1.6); shopView.touched = true; }, {passive:false});
+}
 function positionSlots(){ // 칸 이름표는 위·아래 가장자리에 두고, 총의 해당 위치까지 선을 그음
   const st = $('shopStage'), w = st.clientWidth, h = st.clientHeight;
   shopGun.updateMatrixWorld(true);
@@ -4506,8 +4544,8 @@ function renderItemsPanel(){
                                : '<div class="ds">왼쪽에서 회복템을 누르면 여기에 모습이 나와요.</div>';
 }
 document.querySelectorAll('.shopTabs button').forEach(b => b.onclick = () => setShopTab(b.dataset.tab));
-{ let sx = null; // 좌우로 밀어서 탭 넘기기
-  $('shop').addEventListener('pointerdown', e => { sx = e.clientX; });
+{ let sx = null; // 좌우로 밀어서 탭 넘기기 (무기 미리보기에서 시작한 드래그는 무기를 돌림)
+  $('shop').addEventListener('pointerdown', e => { sx = e.target.closest('#shopStage') ? null : e.clientX; });
   $('shop').addEventListener('pointerup', e => { if (sx === null) return; const dx = e.clientX - sx; sx = null; if (Math.abs(dx) > 70) setShopTab(dx < 0 ? 'items' : 'parts'); });
 }
 for (const k of ['bandage','adren','medkit']) $('it_' + k).addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); useItem(k); });
@@ -4517,7 +4555,7 @@ function openShop(){
   if (document.exitPointerLock) document.exitPointerLock();
   $('shop').classList.remove('hide'); $('shopBtn').classList.add('hide');
   initShopRenderer(); sizeShop();
-  shopSlot = null; shopEq = Object.assign({}, gear[weaponKey].eq); shopTab = 'parts'; setTimeout(() => { if (shopOpen) setShopTab(shopTab); }, 0);
+  shopSlot = null; shopEq = Object.assign({}, gear[weaponKey].eq); shopTab = 'parts'; resetShopView(); setTimeout(() => { if (shopOpen) setShopTab(shopTab); }, 0);
   rebuildShopGun(); renderShop(); updateGold();
 }
 function closeShop(silent){
@@ -4944,7 +4982,7 @@ function loop(){
   let dt = Math.min(clock.getDelta(), 0.05);
   if (hitStopT > 0){ hitStopT -= dt; dt *= .12; } // 패링·찌르기 순간 잠깐 느려짐
   if (state==='play' && !paused) update(dt);
-  if (shopOpen && shopR){ shopT += dt; shopGun.rotation.y = Math.sin(shopT*.6)*.16;
+  if (shopOpen && shopR){ shopT += dt; applyShopView(dt);
     if (shopSaya && shopInnerBase){ // 검집 칸을 고르면 칼집이 앞으로, 칼은 뒤로
       shopSayaK += ((shopSlot === 'saya' ? 1 : 0) - shopSayaK)*Math.min(1, dt*8);
       shopInner.position.x = shopInnerBase.x + .06 - .14*shopSayaK; shopSaya.position.x = shopInnerBase.x - .08 + .16*shopSayaK;
