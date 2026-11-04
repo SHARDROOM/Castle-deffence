@@ -203,3 +203,142 @@ test('회피형: 24m 안이고 보이면 손쇠뇌 발사, 구르는 중에는 �
   Enemies.attack(r, 0.01, ctx2);
   assert.deepEqual(ctx2.calls, []);
 });
+
+// ---------- 보스 (철의 거인) ----------
+const V3 = () => { const v = dirVec(); return v; };
+const boss = (o = {}) => Object.assign({
+  type: 'boss', boss: true, r: 1, speed: 1.8, yaw: 0, dir: dirVec(), state: 'walk', st: 0, dur: 1, stP: 0,
+  chargeCd: 4, comboCd: 0, deflectCd: 7, chargeDir: V3(), chargeLeft: 0, slamYaw: 0, hitDone: false,
+  limboT: 0, leapFrom: V3(), leapTo: V3(), leapY: 0, poiseHits: 0, slowT: 0, buffT: 0,
+}, o);
+const bossCtx = (e, pos, player, o = {}) => {
+  const calls = [];
+  const fx = {};
+  for (const k of ['sfx', 'shake', 'shakeSet', 'bashKnock', 'slow', 'knock', 'crackRing', 'crackPath', 'groundBurst', 'sweepScrape']) fx[k] = (...a) => calls.push([k, ...a.filter(x => typeof x !== 'object')]);
+  fx.hurt = a => { calls.push(['hurt', a.kind, a.dmg]); return { landed: o.landed !== false }; };
+  const world = { hasLOS: () => true, flowDir: OPEN.flowDir, collide: () => {}, breakLanding: () => calls.push(['breakLanding']), breakCharge: () => calls.push(['breakCharge']) };
+  return Object.assign({ pos, player, dist: Math.hypot(player.x - pos.x, player.z - pos.z), canSee: true, rng: () => 0.9, footY: 0, rollT: 0, edm: 1, world, fx, calls }, o);
+};
+const stepUntil = (e, pos, player, dt, until, o) => { let ctx; for (let i = 0; i < 500 && !until(); i++) { ctx = bossCtx(e, pos, player, o); Enemies.bossStep(e, dt, ctx); } return ctx; };
+
+test('보스: setBossState는 상태 시간을 초기화하고, 공격 패턴이 나오면 방패 금지를 푼다', () => {
+  const e = boss({ st: 3, hitDone: true, noDeflect: true });
+  Enemies.setBossState(e, 'recover', 1); assert.equal(e.noDeflect, true); assert.equal(e.st, 0); assert.equal(e.hitDone, false);
+  Enemies.setBossState(e, 'sweepPrep', .9); assert.equal(e.noDeflect, false);
+});
+
+test('보스 walk: 멀고(15m 초과) 보이고 쿨타임이 끝나면 돌진 준비', () => {
+  const e = boss({ chargeCd: 0 }), ctx = bossCtx(e, { x: 0, z: 0 }, { x: 0, z: 20 });
+  Enemies.bossStep(e, 0.01, ctx);
+  assert.equal(e.state, 'chargePrep'); assert.equal(e.chargeCd, 9); assert.deepEqual(ctx.calls, [['sfx', 'bossCharge']]);
+});
+
+test('보스 walk: 가까우면(5.5m 미만) 35%로 방패 밀치기, 아니면 바닥 쓸기', () => {
+  const a = boss(); Enemies.bossStep(a, 0.01, bossCtx(a, { x: 0, z: 0 }, { x: 0, z: 3 }, { rng: () => 0.1 }));
+  assert.equal(a.state, 'bashPrep');
+  const b = boss(); Enemies.bossStep(b, 0.01, bossCtx(b, { x: 0, z: 0 }, { x: 0, z: 3 }, { rng: () => 0.9 }));
+  assert.equal(b.state, 'sweepPrep'); assert.equal(b.comboCd, 6);
+});
+
+test('보스 walk: 사각지대에 4초(광폭화 2.5초) 넘게 머물면 도약', () => {
+  const e = boss({ comboCd: 99, deflectCd: 99, limboT: 3.95 });
+  Enemies.bossStep(e, 0.1, bossCtx(e, { x: 0, z: 0 }, { x: 0, z: 10 }));
+  assert.equal(e.state, 'leapPrep'); assert.equal(e.leapLeft, 1);
+  const r = boss({ comboCd: 99, deflectCd: 99, limboT: 2.45, enraged: true });
+  Enemies.bossStep(r, 0.1, bossCtx(r, { x: 0, z: 0 }, { x: 0, z: 10 }, { rng: () => 0.99 }));
+  assert.equal(r.leapLeft, 3); // 광폭화: 1~3번 연속
+});
+
+test('보스 walk: 방패 쿨타임이 끝나고 24m 안이면 방패 반사, 직전에 들었으면 안 듦', () => {
+  const e = boss({ comboCd: 99, deflectCd: 0 });
+  Enemies.bossStep(e, 0.01, bossCtx(e, { x: 0, z: 0 }, { x: 0, z: 10 }, { rng: () => 0 }));
+  assert.equal(e.state, 'deflect'); assert.equal(e.deflectCd, 10);
+  const n = boss({ comboCd: 99, deflectCd: 0, noDeflect: true });
+  Enemies.bossStep(n, 0.01, bossCtx(n, { x: 0, z: 0 }, { x: 0, z: 10 }));
+  assert.equal(n.state, 'walk');
+});
+
+test('보스 walk: 3m보다 멀면 다가가고, 광폭화하면 1.25배 빠르다', () => {
+  const run = enraged => { const e = boss({ comboCd: 99, deflectCd: 99, enraged }), pos = { x: 0, z: 0 }; e.dir.set(0, 0, 1); Enemies.bossStep(e, 0.1, bossCtx(e, pos, { x: 0, z: 10 })); return pos.z; };
+  assert.ok(run(false) > 0); close(run(true) / run(false), 1.25);
+});
+
+test('보스 bash: 맞으면 뒤로 날려 보내고, 끝나면 도약으로 이어짐', () => {
+  const e = boss({ state: 'bash', dur: .28, st: .12 }), pos = { x: 0, z: 0 };
+  const ctx = bossCtx(e, pos, { x: 0, z: 2 });
+  Enemies.bossStep(e, 0.01, ctx);
+  assert.equal(e.hitDone, true); assert.equal(e.bashHit, true);
+  assert.deepEqual(ctx.calls.map(c => c[0]), ['hurt', 'bashKnock', 'sfx', 'shake']);
+  stepUntil(e, pos, { x: 0, z: 2 }, 0.05, () => e.state === 'leapPrep');
+  assert.equal(e.state, 'leapPrep');
+});
+
+test('보스 bash: 빗나가면 bashEnd 후 recover', () => {
+  const e = boss({ state: 'bash', dur: .28, st: .12 }), pos = { x: 0, z: 0 };
+  Enemies.bossStep(e, 0.01, bossCtx(e, pos, { x: 0, z: 2 }, { landed: false }));
+  assert.ok(!e.bashHit);
+  stepUntil(e, pos, { x: 0, z: 2 }, 0.05, () => e.state === 'recover' || e.state === 'leapPrep', { landed: false });
+  assert.equal(e.state, 'recover');
+});
+
+test('보스 leap: 플레이어 쪽으로 최대 9m 뛰어 착지, 착지하면 엄폐물 파괴·충격파', () => {
+  const e = boss({ state: 'leapPrep', dur: .6, st: .6 }), pos = { x: 0, z: 0 };
+  Enemies.bossStep(e, 0.01, bossCtx(e, pos, { x: 0, z: 20 }));
+  assert.equal(e.state, 'leap'); close(e.leapTo.z, 9, 1e-6);
+  const ctx = stepUntil(e, pos, { x: 0, z: 20 }, 0.05, () => e.state !== 'leap');
+  close(pos.z, 9, 1e-6); assert.equal(e.leapY, 0); assert.equal(e.state, 'recover');
+  assert.ok(ctx.calls.some(c => c[0] === 'breakLanding')); assert.ok(ctx.calls.some(c => c[0] === 'crackRing'));
+});
+
+test('보스 leap 착지: 3m 안이면 15, 9m 안이면 5 피해 (패링 불가), 구르는 중에는 없음', () => {
+  const land = (pz, o) => { const e = boss({ state: 'leap', dur: .75, st: .74, leapFrom: V3(), leapTo: V3() }); const ctx = bossCtx(e, { x: 0, z: 0 }, { x: 0, z: pz }, o); Enemies.bossStep(e, 0.05, ctx); return ctx.calls.filter(c => c[0] === 'hurt'); };
+  assert.deepEqual(land(2), [['hurt', 'bossAoe', 15]]);
+  assert.deepEqual(land(6), [['hurt', 'bossAoe', 5]]);
+  assert.deepEqual(land(2, { rollT: 0.2 }), []);
+  assert.deepEqual(land(12), []);
+});
+
+test('보스 charge: 벽에 막혀 거의 못 나아가면 기절', () => {
+  const e = boss({ state: 'charge', dur: 1.6, chargeLeft: 30 }), pos = { x: 0, z: 0 };
+  e.chargeDir.set(0, 0, 1);
+  const ctx = bossCtx(e, pos, { x: 0, z: 30 });
+  ctx.world.collide = p => { p.z = 0; }; // 벽
+  Enemies.bossStep(e, 0.05, ctx);
+  assert.equal(e.state, 'stun'); assert.ok(ctx.calls.some(c => c[0] === 'shakeSet'));
+});
+
+test('보스 charge: 지나가며 한 번만 맞히고 넉백', () => {
+  const e = boss({ state: 'charge', dur: 1.6, chargeLeft: 30 }), pos = { x: 0, z: 0 };
+  e.chargeDir.set(0, 0, 1);
+  const ctx = bossCtx(e, pos, { x: 0, z: 1.5 });
+  Enemies.bossStep(e, 0.05, ctx);
+  assert.deepEqual(ctx.calls.filter(c => c[0] === 'hurt' || c[0] === 'knock'), [['hurt', 'bossMelee', 35], ['knock', 5]]);
+  const ctx2 = bossCtx(e, pos, { x: 0, z: 2 });
+  Enemies.bossStep(e, 0.05, ctx2);
+  assert.ok(!ctx2.calls.some(c => c[0] === 'hurt'));
+});
+
+test('보스 콤보: sweep → raise → stomp → hold → slam → recover, 광폭화하면 slam 한 번 더', () => {
+  const run = enraged => {
+    const e = boss({ state: 'sweep', dur: .7, enraged }), pos = { x: 0, z: 0 }, seen = ['sweep'];
+    for (let i = 0; i < 400 && e.state !== 'recover'; i++) { Enemies.bossStep(e, 0.02, bossCtx(e, pos, { x: 0, z: 4 })); if (seen[seen.length - 1] !== e.state) seen.push(e.state); }
+    return seen;
+  };
+  assert.deepEqual(run(false), ['sweep', 'raise', 'stomp', 'hold', 'slam', 'recover']);
+  assert.deepEqual(run(true), ['sweep', 'raise', 'stomp', 'hold', 'slam', 'raise2', 'slam', 'recover']);
+});
+
+test('보스 deflect: 끝나면 walk, 광폭화 즉시 반격은 가까우면 sweep·멀면 준비 없이 charge', () => {
+  const a = boss({ state: 'deflect', dur: 1, st: 1 }); Enemies.bossStep(a, 0.01, bossCtx(a, { x: 0, z: 0 }, { x: 0, z: 10 }));
+  assert.equal(a.state, 'walk'); assert.equal(a.noDeflect, true);
+  const b = boss({ state: 'deflect', dur: 1, st: 1, quickGuard: true }); Enemies.bossStep(b, 0.01, bossCtx(b, { x: 0, z: 0 }, { x: 0, z: 4 }));
+  assert.equal(b.state, 'sweep');
+  const c = boss({ state: 'deflect', dur: 1, st: 1, quickGuard: true }); Enemies.bossStep(c, 0.01, bossCtx(c, { x: 0, z: 0 }, { x: 0, z: 10 }));
+  assert.equal(c.state, 'charge'); close(c.chargeLeft, 16);
+});
+
+test('보스: 광폭화하면 쿨타임이 1.7배 빨리 돈다', () => {
+  const e = boss({ state: 'stun', dur: 99, chargeCd: 5, enraged: true });
+  Enemies.bossStep(e, 1, bossCtx(e, { x: 0, z: 0 }, { x: 0, z: 10 }));
+  close(e.chargeCd, 5 - 1.7);
+});

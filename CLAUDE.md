@@ -21,5 +21,5 @@ Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/ag
 - `defense.js`: decides incoming damage to the player (dodge, parry, guard). Loaded the same way as `combat.js`.
 - `armory.js`: weapon, part and item data, weapon stat calculation, and gold, gear and item transactions. Loaded the same way.
 - `waves.js`: the wave director. Decides wave composition, the clear delay and thief spawns on game time, and returns commands that `index.html` executes.
-- `enemies.js`: soldier behaviour (movement, kiting, dodge rolls, melee and shooting) for regular enemies. Navigation and effects are injected; rendering stays in `index.html`. The boss, thief and airship are still in `index.html`.
+- `enemies.js`: soldier behaviour (movement, kiting, dodge rolls, melee and shooting) for regular enemies. Navigation and effects are injected; rendering stays in `index.html`. Also the boss (Iron Giant) state machine (`Enemies.bossStep`). The thief and airship are still in `index.html`.
 - Tests: `node --test` (Node 18+, no dependencies)
