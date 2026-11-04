@@ -305,6 +305,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <script src="defense.js"></script>
 <script src="armory.js"></script>
 <script src="waves.js"></script>
+<script src="enemies.js"></script>
 <script>
 (() => {
 // ---------- 둥근 모양 도형 (캐릭터 폴리곤 늘리기) ----------
@@ -4534,6 +4535,20 @@ $('goBtn').onclick = resetGame;
 const clock = new THREE.Clock();
 const tmp = new THREE.Vector3();
 let lastCool = null;
+// 일반 병사 AI(enemies.js)에 주입하는 길찾기·충돌과 효과
+const SOLDIER_WORLD = {hasLOS, flowDir: (x, z, px, pz, out) => flowDir(x, z, px, pz, out), retreatDir, freeAt, collide: (p, r) => collide(p, r)};
+const SOLDIER_FX = {rollStart(e, dist){ fade(e, 0.35); sfx.enemyRoll(dist); }};
+function soldierFx(g, p, chestY, eyeY){ // 근접 공격·조준·사격 (이번 프레임의 위치 기준)
+  return {
+    swing: (e, dist) => sfx.enemySwing(dist),
+    meleeHit: (e, dmg, dist) => hurtPlayer({dmg, kind: 'soldierMelee', from: g.position, src: e, dist}),
+    aim: () => aimAngle(g, chestY, p, eyeY - 0.3, arrowSpeed()),
+    fireArrow: () => shootArrow(g, chestY, p, eyeY - 0.3, arrowSpeed(), 0.6),
+    bow: (e, dist) => sfx.bow(dist),
+    fireBolt: () => shootArrow(g, chestY, p, eyeY - 0.3, 20, 0.3),
+    crossbow: (e, dist) => sfx.enemyShot(dist),
+  };
+}
 function update(dt){
   const p = yawObj.position;
   updateCoins(dt, p);
@@ -4721,104 +4736,23 @@ function update(dt){
     const dist = tmp.length();
     const chestY = 1.35*D.scale;
     const canSee = hasLOS(g.position.x, g.position.z, p.x, p.z, 0.1, Math.min(chestY, eyeY) - 0.1);
-    let moving = false;
     if (D.boss){ updateBoss(e, dt, p, dist, canSee); if (state!=='play') return; continue; }
     if (D.thief){ updateThief(e, dt, p, dist); continue; }
-    if (e.rollT > 0){ // 암살자 구르기 중: 무적, 옆으로 빠르게 이동하며 앞구르기
-      e.rollT -= dt;
-      g.position.x += e.rdx*11*dt; g.position.z += e.rdz*11*dt;
-      const prog = 1 - Math.max(0, e.rollT)/0.35;
-      e.rig.rotation.x = prog*Math.PI*2; e.rig.position.y = 0.9 - Math.sin(prog*Math.PI)*0.4;
-      if (e.rollT <= 0){ fade(e, 1); e.rig.rotation.x = 0; e.rig.position.y = 0.9; }
-    } else {
-      if (D.dodges){
-        e.rollCd -= dt;
-        if (e.rollCd <= 0 && dist > 2){
-          e.rollCd = 1.3 + Math.random()*2.2; e.rollT = 0.35; fade(e, 0.35);
-          const side = Math.random() < .5 ? 1 : -1;
-          const a = Math.atan2(tmp.z, tmp.x) + side*(Math.PI/2 + (Math.random()-.5)*0.9);
-          e.rdx = Math.cos(a); e.rdz = Math.sin(a);
-          sfx.enemyRoll(dist);
-        }
-      }
-      let spd = 1;
-      const archer = e.type === 'ranged', bearer = e.type === 'banner';
-      const kMin = archer ? ARCH_MIN : 7, kMax = archer ? ARCH_MAX : 13;
-      if ((archer && (e.aimT > 0 || e.recoverT > 0)) || (bearer && e.flagT > 0)){
-        // 활을 당기는 동안에는 멈춰 섬
-      } else if ((archer || bearer) && canSee && dist <= kMax){
-        // 궁수: 사거리 안에서는 돌진하지 않고 거리를 유지
-        moving = true; tmp.normalize();
-        if (dist < kMin){ retreatDir(g.position, tmp); spd = 0.8; }  // 너무 가까우면 뒤로 물러남
-        else {                                                          // 적정 거리면 옆걸음
-          e.strafeT -= dt;
-          if (e.strafeT <= 0){ e.strafeT = 1.5 + Math.random()*2; e.strafeSign = Math.random() < .5 ? -1 : 1; }
-          tmp.set(-tmp.z*e.strafeSign, 0, tmp.x*e.strafeSign);
-          if (!freeAt(g.position.x + tmp.x*1.2, g.position.z + tmp.z*1.2)){ e.strafeSign *= -1; tmp.multiplyScalar(-1); }
-          spd = 0.45;
-        }
-      } else if (dist > e.r + 0.5){
-        // 곧장 갈 수 있으면 직진, 막혀 있으면 플로우 필드를 따라 우회 (궁수는 사거리 밖이거나 안 보일 때)
-        moving = true;
-        const canWalk = hasLOS(g.position.x, g.position.z, p.x, p.z, Math.min(e.r, 0.6));
-        if (canWalk) tmp.normalize(); else flowDir(g.position.x, g.position.z, p.x, p.z, tmp);
-      }
-      if (moving){
-        if (e.unstuck > 0){ e.unstuck -= dt; tmp.set(e.ux, 0, e.uz); }
-        e.dir.lerp(tmp, Math.min(1, dt*8)).normalize();
-        const slowM = (e.slowT > 0 ? .4 : 1)*(e.buffT > 0 ? 1.4 : 1); g.position.x += e.dir.x*e.speed*spd*slowM*dt; g.position.z += e.dir.z*e.speed*spd*slowM*dt;
-      }
+    // 일반 병사: 행동은 Enemies(enemies.js)가 정하고, 여기서는 그리기와 효과만
+    const mv = Enemies.move(e, dt, {pos: g.position, player: p, dist, canSee, rng: Math.random, enemies, posOf: o => o.g.position,
+      world: SOLDIER_WORLD, fx: SOLDIER_FX, ARCH_MIN, ARCH_MAX});
+    tmp.copy(mv.dir); // 전역 tmp는 리팩터 전처럼 마지막 이동 방향을 담아 둠
+    if (mv.rolled){ // 구르기 자세
+      const rp = Enemies.rollPose(e.rollT); e.rig.rotation.x = rp.rotX; e.rig.position.y = rp.y;
+      if (mv.rollEnded){ fade(e, 1); e.rig.rotation.x = 0; e.rig.position.y = 0.9; }
     }
-    collide(g.position, e.r);
-    // 0.8초 동안 거의 못 움직였으면 잠깐 옆으로 비켜감
-    e.chk -= dt;
-    if (e.chk <= 0){
-      const moved = Math.hypot(g.position.x-e.lx, g.position.z-e.lz);
-      if (moving && dist > e.r + 1 && moved < e.speed*0.25){ const a = Math.random()*Math.PI*2; e.ux = Math.cos(a); e.uz = Math.sin(a); e.unstuck = 0.45; }
-      e.lx = g.position.x; e.lz = g.position.z; e.chk = 0.8;
-    }
-    for (const o of enemies) if (o!==e && !o.airship && !(o.dropY > 0)){
-      const dx=g.position.x-o.g.position.x, dz=g.position.z-o.g.position.z, d=Math.hypot(dx,dz), mn=(e.r+o.r)*1.1;
-      if (d<mn && d>0){ g.position.x += dx/d*(mn-d)*.5; g.position.z += dz/d*(mn-d)*.5; }
-    }
-    // 몸 방향은 부드럽게 돌리고, 관절 애니메이션 적용
-    g.position.y = 0;
-    let dyaw = Math.atan2(p.x - g.position.x, p.z - g.position.z) - e.yaw;
-    dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
-    e.yaw += dyaw*Math.min(1, dt*(e.aimT > 0 ? 14 : 8)); g.rotation.set(0, e.yaw, 0);
+    // 몸 방향과 관절 애니메이션, 색
+    g.position.y = 0; g.rotation.set(0, e.yaw, 0);
     animateSoldier(e, dt, dist);
     if (e.flash>0){ e.flash-=dt; tint(e, 0xffffff); }
     else tint(e, e.burn>0 ? 0x8a3000 : e.slowT > 0 ? 0x1c3a66 : e.buffT > 0 ? 0x3a2a00 : 0x000000);
-    // 근접 공격: 붙기만 해서는 피해가 없고, 준비 동작 → 타격 순간에 한 번만 판정 (이때 패링 가능)
-    const MA = MELEE[e.type];
-    if (e.atkPh > 0){
-      const prev = e.atkPh; e.atkPh += dt/MA.dur;
-      if (prev < MA.hit && e.atkPh >= MA.hit){
-        sfx.enemySwing(dist);
-        if (dist < e.r + 1.3 && footY < 1.6*D.scale) hurtPlayer({dmg: MA.dmg*edm(), kind: 'soldierMelee', from: g.position, src: e, dist});
-      }
-      if (e.atkPh >= 1){ e.atkPh = 0; e.atkCd = MA.cd; }
-    } else if (dist < e.r + .9 && footY < 1.6*D.scale && e.atkCd <= 0 && !(e.aimT > 0)){ e.atkPh = .001; }
-    e.atkCd -= dt;
-    if (D.shoots){
-      e.shoot -= dt;
-      const cd = Math.max(1.2, 3.2 - wave*0.15) + Math.random()*1.5;
-      if (e.type === 'ranged'){
-        // 궁수: 멈춤 → 조준(활 당기기) → 발사 → 잠깐 자세 유지
-        if (e.aimT > 0){
-          e.aimT -= dt;
-          if (!canSee){ e.aimT = 0; e.shoot = 0.4; }
-          else if (e.aimT <= 0){ e.aimAng = shootArrow(g, chestY, p, eyeY - 0.3, arrowSpeed(), 0.6); e.recoverT = 0.35; e.shoot = cd; sfx.bow(dist); }
-          else e.aimAng = aimAngle(g, chestY, p, eyeY - 0.3, arrowSpeed());
-        } else if (e.recoverT > 0) e.recoverT -= dt;
-        else if (e.shoot <= 0 && canSee && dist <= ARCH_MAX + 1){
-          e.aimT = AIM_TIME; e.aimAng = aimAngle(g, chestY, p, eyeY - 0.3, arrowSpeed());
-        }
-      } else if (e.shoot<=0 && dist<24 && canSee && !(e.rollT>0)){
-        // 암살자: 손쇠뇌라 빠르고 납작한 탄도
-        e.shoot = cd; shootArrow(g, chestY, p, eyeY - 0.3, 20, 0.3); sfx.enemyShot(dist);
-      }
-    }
+    Enemies.attack(e, dt, {dist, canSee, footY, rng: Math.random, wave, melee: MELEE[e.type], edm: edm(),
+      ARCH_MAX, AIM_TIME, fx: soldierFx(g, p, chestY, eyeY)});
     if (state!=='play') return;
   }
 
