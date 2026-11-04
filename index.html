@@ -1547,6 +1547,46 @@ function makeArm(){ // 1인칭 팔: 옛날 상자 모양 팔뚝·주먹을 하�
 }
 const armVL = makeArm(), armVR = makeArm();
 const ARM_S = {L: new THREE.Vector3(-.3,-.6,-.12), R: new THREE.Vector3(.36,-.6,-.1)}; // 화면 밖 팔꿈치 쪽
+const THRUST_ELBOW = new THREE.Vector3(-.14,-.29,-.42);  // 레이피어 찌르기: 오른팔을 왼쪽으로 끌어당겨 팔꿈치가 화면 아래쪽에 살짝 보임
+const THRUST_SHOULDER = new THREE.Vector3(.26,-.66,.02);  // 위팔이 이어지는 오른쪽 어깨 (화면 밖)
+// 위팔·아래팔·주먹을 뼈 3개로 이은 스키닝 팔 (팔꿈치·손목이 끊기지 않고 휘어짐). 레이피어로 찌를 때 오른팔로 씀
+function makeArm3(){
+  const g = new THREE.Group();
+  const upper = new THREE.Bone(), fore = new THREE.Bone(), hand = new THREE.Bone(); g.add(upper, fore, hand);
+  fore.position.set(0, 1, 0); hand.position.set(0, 2.06, 0); hand.rotation.x = Math.PI; // 붙일 때 자세: 위팔 0~1, 아래팔 1~2, 주먹 2.06
+  const ug = new THREE.BoxGeometry(.085, 1, .085, 1, 12, 1); ug.translate(0, .5, 0);
+  const fg = new THREE.BoxGeometry(.075, 1, .075, 1, 12, 1); fg.translate(0, 1.5, 0);
+  const hg = new THREE.BoxGeometry(.1, .075, .066, 2, 3, 1); hg.translate(0, 2.06, 0);
+  const pos = [], nor = [], idx = [], si = [], sw = [];
+  const clamp01 = v => Math.min(1, Math.max(0, v));
+  const addG = (geo, part) => {
+    const p = geo.attributes.position, n = geo.attributes.normal, o = pos.length/3;
+    for (let i=0;i<p.count;i++){
+      const y = p.getY(i); pos.push(p.getX(i), y, p.getZ(i)); nor.push(n.getX(i), n.getY(i), n.getZ(i));
+      let w = [0, 0, 0];                                                       // [위팔, 아래팔, 주먹]
+      if (part === 0){ const t = clamp01((y - .82)/.18)*.5; w = [1 - t, t, 0]; }  // 팔꿈치 근처는 아래팔과 섞음
+      else if (part === 1){
+        const e = clamp01((1.18 - y)/.18)*.5, h = clamp01((y - 1.9)/.1)*.5;     // 팔꿈치 쪽은 위팔, 손목 쪽은 주먹과 섞음
+        w = [e, 1 - e - h, h];
+      } else { const t = clamp01((y - 2.0)/.03 + .5); w = [0, 1 - t, t]; }
+      si.push(0, 1, 2, 0); sw.push(w[0], w[1], w[2], 0);
+    }
+    const id = geo.index.array; for (let i=0;i<id.length;i++) idx.push(id[i] + o);
+    return id.length;
+  };
+  const geo = new THREE.BufferGeometry();
+  const nArm = addG(ug, 0) + addG(fg, 1), nH = addG(hg, 2);
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4)); geo.setIndex(idx);
+  geo.addGroup(0, nArm, 0); geo.addGroup(nArm, nH, 1);
+  const mS = ARM_M.sleeve.clone(), mG = ARM_M.glove.clone(); mS.skinning = mG.skinning = true;
+  const mesh = new THREE.SkinnedMesh(geo, [mS, mG]); mesh.frustumCulled = false; g.add(mesh);
+  camera.add(g); g.updateMatrixWorld(true); mesh.bind(new THREE.Skeleton([upper, fore, hand]));
+  g.visible = false;
+  return {g, upper, fore, hand, mesh};
+}
+const armVR3 = makeArm3();
+let armRS = ARM_S.R; // 지금 오른팔 팔꿈치 기준점 (animateSword가 정함)
 const _av = new THREE.Vector3(), _ad = new THREE.Vector3(), _UP = new THREE.Vector3(0,1,0);
 const _wd = new THREE.Vector3(), _wr = new THREE.Vector3(), _hz = new THREE.Vector3(), _hm = new THREE.Matrix4();
 // 주먹은 손잡이(axis)를 감싸 쥐고, 손목은 손잡이에서 팔 쪽으로 꺾인 자리 → 팔뚝은 팔꿈치(S)에서 손목까지
@@ -1740,6 +1780,7 @@ function updateItem(dt){
 }
 
 function updateViewArms(){
+  armVR3.g.visible = false; // 레이피어 찌를 때만 아래에서 다시 켬
   if (itemUse && state === 'play'){ // 회복템 사용 중: 총은 내리고 두 팔로 붕대·주사 동작
     gun.visible = false; scab.visible = false; armVL.g.visible = armVR.g.visible = true; return;
   }
@@ -1758,7 +1799,12 @@ function updateViewArms(){
     bgv.updateMatrix(); const kp = _av.set(.058, 0, 0).applyMatrix4(bgv.matrix).applyMatrix4(gunModel.matrix).applyMatrix4(gun.matrix).clone();
     rp.lerp(kp, w); if (w > .5) rax = axisOf([0,1,0], _q1.clone().multiply(bgv.quaternion));
   }
-  placeArm(armVR, rp, ARM_S.R, rax);
+  if (sword && armRS === THRUST_ELBOW){ // 레이피어 찌르기: 어깨-팔꿈치-손을 이은 스키닝 팔 (팔꿈치가 화면 아래에 살짝 보임)
+    armVR.g.visible = false; armVR3.g.visible = true;
+    placeArm(armVR3, rp, THRUST_ELBOW, rax);                                     // 아래팔·주먹 (팔꿈치 → 손목)
+    const d = _av.copy(THRUST_ELBOW).sub(THRUST_SHOULDER), len = d.length();    // 위팔 (어깨 → 팔꿈치)
+    armVR3.upper.position.copy(THRUST_SHOULDER); armVR3.upper.scale.set(1, len, 1); armVR3.upper.quaternion.setFromUnitVectors(_UP, d.normalize());
+  } else placeArm(armVR, rp, W.melee ? armRS : ARM_S.R, rax);
   if (sword && W.rapier){ // 레이피어: 왼손은 뒷짐 (칼집에 있을 때와 뽑고 넣을 때만 칼집을 잡음)
     if (!swordOut || drawT > 0 || sheathT > 0){ scab.updateMatrix(); const lp = _av.set(0, .3, 0).applyMatrix4(scab.matrix); placeArm(armVL, lp.clone(), ARM_S.L, axisOf([0,1,0], scab.quaternion)); }
     else armVL.g.visible = false;
@@ -3206,7 +3252,10 @@ function openDeflect(){ // 정밀 흘리기 창
   markParryProjectiles();
 }
 function startThrust(){ // 팔을 L자로 몸에 붙였다가 연속 찌르기 (공격 속도가 빠를수록 더 많이)
-  thrust = {n: Armory.thrustCount(W, rateMul()), i: 0, t: 0}; fireCd = THRUST_DUR;
+  const n = Armory.thrustCount(W, rateMul());
+  // 찌를 곳: 조준점 주변 위·아래·좌·우로 조금씩 다르게 (보이는 동작만, 판정은 앞쪽 좁은 범위 그대로)
+  const aims = []; for (let i=0;i<n;i++){ const a = Math.random()*Math.PI*2, r = .12 + Math.random()*.22; aims.push({x:Math.cos(a)*r, y:Math.sin(a)*r*.75}); }
+  thrust = {n, i: 0, t: 0, aims}; fireCd = THRUST_DUR;
   thrustFrom = {x:SWC.x, y:SWC.y, z:SWC.z, q:SWC.q.clone()};
 }
 let thrustFrom = null;
@@ -3556,6 +3605,7 @@ function keyPose(keys, t){ // 키 자세들을 지나는 매끄러운 곡선 (�
 }
 function animateSword(dt, dip){
   if (knockT > 0) knockT = Math.max(0, knockT - dt);
+  armRS = thrust ? THRUST_ELBOW : ARM_S.R;
   if (!(parryT > 0) && !(knockT > 0) && !guarding) sheathParry = false;
   { // 칼집 위치: 평소엔 왼쪽 허리, 칼집째 막을 땐 눈앞으로 들어 올림
     const tgt = sheathParry ? withVar(BLOCKP) : (W.great && sheathPlant && guarding) ? {x:SWC.x, y:SWC.y, z:SWC.z, q:SWC.q} : W.great ? GREAT_BACK : SCABP, kf = Math.min(1, dt*(sheathParry ? 30 : 12));
@@ -3617,10 +3667,15 @@ function animateSword(dt, dip){
     const kk = knockAmt(); T = poseDir(.02 + kk*.03, -.24 + kk*.03, -.5, [kk*.15, 1, -.08], [1, 0, 0]);
   } else if (guarding && !sheathParry){ // 발도 가드: 칼을 가로로 눕혀 들고, 왼손등으로 칼등을 받침 (막을 때마다 살짝 튕김)
     const kk = knockAmt(); T = {x:.12 + kk*.04, y:-.1 + kk*.04, z:-.46, rx:-.12 - kk*.15, ry:0, rz:1.5 + kk*.3 + Math.sin(performance.now()/90)*.008};
-  } else if (thrust){ // 레이피어 연속 찌르기: 팔을 L자로 몸에 붙였다가 곧게 뻗기를 반복
-    const L = poseDir(.2, -.24, -.42, [-.08, .1, -1], [1, 0, 0]), X = poseDir(.06, -.14, -.88, [-.03, .05, -1], [1, 0, 0]); // L: 팔꿈치를 옆구리에 붙이고 칼을 당김, X: 곧게 뻗음
-    const per = THRUST_DUR/thrust.n, k = Math.min(1, (thrust.t % per)/per);
-    T = thrust.t < per*.2 ? lerpPose(thrustFrom || L, L, thrust.t/(per*.2)) : keyPose([[0, L], [.35, X], [.55, X], [1, L]], k); snap = true;
+  } else if (thrust){ // 레이피어 연속 찌르기: 오른팔을 왼쪽 위로 끌어당겼다가 가운데 쪽으로 찌르기를 반복 (찌를 곳은 조준점 주변 여기저기)
+    const per = THRUST_DUR/thrust.n, i = Math.min(thrust.n - 1, Math.floor(thrust.t/per)), k = Math.min(1, (thrust.t - i*per)/per);
+    const aim = thrust.aims[i];
+    // 당김: 오른팔을 최대한 왼쪽으로 끌어당겨 손은 왼쪽 위, 팔꿈치는 살짝 굽힘. 칼은 가운데 쪽을 향해 수평에 가깝게
+    const L = poseDir(-.3, .03, -.5, [.82, -.05, -.57], [0, 1, 0]);
+    // 뻗음: 왼쪽 위에서 가운데 쪽으로 찔러 넣음 (찌를 곳은 조준점 주변 여기저기)
+    const hx = -.1 + aim.x*.25, hy = .01 + aim.y*.25, hz = -.74;
+    const X = poseDir(hx, hy, hz, [.42 + aim.x, aim.y*.8 - .02, -.9], [0, 1, 0]);
+    T = thrust.t < per*.2 && i === 0 ? lerpPose(thrustFrom || L, L, thrust.t/(per*.2)) : keyPose([[0, L], [.35, X], [.55, X], [1, L]], k); snap = true;
   } else if (rapierFlickT > 0){ // 정밀 흘리기: 날로 상대 공격을 바깥으로 살짝 빗겨 쳐냄
     const k = 1 - rapierFlickT/.22;
     T = keyPose([[0, RAP_IDLE], [.35, poseDir(-.04, -.16, -.6, [.4, .38, -.83], [1, 0, 0])], [1, RAP_IDLE]], k); snap = true;
