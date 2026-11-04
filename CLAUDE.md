@@ -16,6 +16,7 @@ Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/ag
 
 ## Code layout
 
-- `index.html`: the whole game (HUD, three.js scene, game loop). Uses the global `Combat` from `combat.js`.
+- `index.html`: the whole game (HUD, three.js scene, game loop). Uses the globals `Combat` and `Defense`.
 - `combat.js`: decides enemy damage and kill rewards. Runs in the browser via a plain `<script>` and in Node via `require`.
+- `defense.js`: decides incoming damage to the player (dodge, parry, guard). Loaded the same way as `combat.js`.
 - Tests: `node --test` (Node 18+, no dependencies)
