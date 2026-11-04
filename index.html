@@ -304,6 +304,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <script src="combat.js"></script>
 <script src="defense.js"></script>
 <script src="armory.js"></script>
+<script src="waves.js"></script>
 <script>
 (() => {
 // ---------- 둥근 모양 도형 (캐릭터 폴리곤 늘리기) ----------
@@ -1743,15 +1744,6 @@ const ETYPES = {
   dodger:{name:'암살자',   color:0x3a2e4a, pants:0x2b2230, scale:0.95, hp:w=>3+Math.floor(w/3), speed:w=>2.8+Math.min(w*0.2,1.5),  shoots:true,  melee:28, score:150, dodges:true, xp:4},
   boss:  {name:'철의 거인', color:0x58616d, pants:0x3c434d, scale:2.2, hp:w=>Math.round(220*(1+0.6*(Math.max(1, Math.floor(w/5))-1))), speed:w=>1.8, shoots:false, melee:0, score:1500, xp:30, boss:true, poise:6} // poise = 그로기 강도: 이만큼 패링하면 그로기
 };
-function pickType(){
-  const pool = ['ranged','ranged','speed'];
-  if (wave >= 2) pool.push('dodger','speed');
-  if (wave >= 3) pool.push('heavy');
-  if (wave >= 5) pool.push('dodger','heavy');
-  // 6웨이브부터 깃발 기수 (동시에 최대 2명)
-  if (wave >= 6 && enemies.filter(o => o.type === 'banner').length < 2 && Math.random() < .18) return 'banner';
-  return pool[Math.floor(Math.random()*pool.length)];
-}
 const SG = { // 옛날 상자 모델 (팔다리는 아래에서 스키닝으로 휘어지는 한 덩어리)
   pelvis: new THREE.BoxGeometry(0.46,0.22,0.28), chest: new THREE.BoxGeometry(0.5,0.52,0.3), head: new THREE.BoxGeometry(0.3,0.3,0.3),
   thigh: new THREE.BoxGeometry(0.17,0.46,0.19), shin: new THREE.BoxGeometry(0.15,0.42,0.17), foot: new THREE.BoxGeometry(0.16,0.08,0.27),
@@ -2249,18 +2241,18 @@ function makeArrow(){
   g.add(new THREE.Mesh(AG.shaft, AM.shaft), t, f, f2);
   return g;
 }
-function startWave(){
-  const bossWave = wave % 5 === 0; // 5웨이브마다 철의 거인
-  const n = bossWave ? Math.ceil((3 + wave*2)*0.4) : 3 + wave*2;
-  for (let i=0;i<n;i++) spawnEnemy(pickType());
-  if (bossWave){ spawnEnemy('boss'); sfx.bossRoar(); shakeT = .6; if (Math.floor(wave/5) >= 2) setTimeout(() => sfx.bossRoar(), 500); }
-  if (wave >= 11){ for (let i=0;i<(wave >= 16 ? 2 : 1);i++) spawnAirship(); if (wave === 11) showNotice('비행선이 나타났어요! 칼로 화살을 패링하면 바로 격추돼요', 0xffd166); }
-  if (wave===2) showNotice('구르며 피하는 암살자가 나타나요', 0xffd166);
-  if (wave===6) showNotice('깃발을 든 기수가 나타나요: 주변 적을 강화해요', 0x8fb8ff);
-  if (wave===3) showNotice('느리지만 단단한 중갑기사가 나타나요', 0xc9d0da);
-  if (wave % 5 === 0) showNotice(Math.floor(wave/5) >= 2 ? '광폭화한 철의 거인이 성문을 부수고 들어와요' : '철의 거인이 성문으로 들어와요', 0xff8a6a);
-  showBanner('웨이브 ' + wave); sfx.wave();
-  updateHUD();
+// 웨이브 진행은 Waves(waves.js)가 정하고, 여기서는 명령을 실행만 한다
+const director = Waves.create();
+function runWaveCommands(cmds){
+  for (const c of cmds){
+    if (c.type === 'waveStart') wave = c.wave;          // 전역 wave는 디렉터의 복사본 (스폰보다 먼저 맞춤)
+    else if (c.type === 'spawn') spawnEnemy(c.kind);
+    else if (c.type === 'bossRoar'){ sfx.bossRoar(); shakeT = .6; if (c.enraged) setTimeout(() => sfx.bossRoar(), 500); }
+    else if (c.type === 'airship') spawnAirship();
+    else if (c.type === 'notice') showNotice(c.text, c.color);
+    else if (c.type === 'thiefNotice'){ showNotice('금화 자루를 든 도둑이 나타났어요!', 0xffd166); sfx.coin(); }
+    else if (c.type === 'waveBanner'){ showBanner('웨이브 ' + c.wave); sfx.wave(); updateHUD(); }
+  }
 }
 function applyKill(e, k){ // Combat이 정한 처치 보상을 게임에 적용
   if (!k) return; // 이미 추락 중인 비행선
@@ -2287,7 +2279,7 @@ function applyKill(e, k){ // Combat이 정한 처치 보상을 게임에 적용
 }
 function onWaveCleared(){ // 남은 적(도둑 제외)이 없으면 웨이브 클리어
   hp = Math.min(maxHp(), hp+25);
-  setTimeout(()=>{ if(state==='play'){ wave++; startWave(); } }, 1800);
+  director.waveCleared(); // 다음 웨이브는 게임 시간 1.8초 뒤 (일시정지 중에는 멈춤)
   showBanner('웨이브 클리어'); sfx.clear();
 }
 
@@ -2631,7 +2623,6 @@ function emberAt(e){
   bits.push({m, v:new THREE.Vector3((Math.random() - .5)*.6, 3 + Math.random()*2, (Math.random() - .5)*.6), life:.6});
 }
 // ---------- 도둑: 공격하지 않고 금화를 주워 담다가 성문으로 달아남 ----------
-let thiefTimer = 60;
 const THIEF_EXIT = new THREE.Vector3(0, 0, -27.6);
 function updateThief(e, dt, p, dist){
   const g = e.g; e.thiefT = (e.thiefT || 0) + dt;
@@ -4522,10 +4513,10 @@ function resetGame(){
   $('scope').style.opacity = 0; $('cross').style.opacity = 1; gun.visible = true;
   camera.fov = 75; camera.updateProjectionMatrix();
   yawObj.position.set(0,1.6,-4); yaw=Math.PI; pitch=0; camera.rotation.z=0;
-  hp=100; score=0; wave=1; ammo=W.mag; reloading=0; fireCd=0; vig=0;
-  footY=0; vy=0; onGround=true; rollT=0; rollCd=0; gun.rotation.x=0; lastPX=0; lastPZ=0; pVel.set(0,0,0); kbVx = 0; kbVz = 0; resetLevels(); resetBoss(); resetSword(); resetShop(); thiefTimer = 60;
+  hp=100; score=0; ammo=W.mag; reloading=0; fireCd=0; vig=0;
+  footY=0; vy=0; onGround=true; rollT=0; rollCd=0; gun.rotation.x=0; lastPX=0; lastPZ=0; pVel.set(0,0,0); kbVx = 0; kbVz = 0; resetLevels(); resetBoss(); resetSword(); resetShop();
   state='play'; $('loadout').classList.add('hide');
-  startWave();
+  runWaveCommands(director.start(enemies)); // 새 판: 웨이브 1, 이전 판의 웨이브 예약은 사라짐
 }
 function gameOver(){
   state='over'; firing=false; stopMusic(); sfx.over(); setScope(false);
@@ -4549,11 +4540,7 @@ function update(dt){
   if (itemUse) updateItem(dt);
   if (!itemUse && !gun.visible && !scoped) gun.visible = true;
   if (adrenT > 0){ adrenT -= dt; $('adrenFx').style.opacity = Math.min(1, adrenT)*.8; } else $('adrenFx').style.opacity = 0;
-  thiefTimer -= dt; // 드물게 금화 도둑 등장
-  if (thiefTimer <= 0){
-    thiefTimer = 20 + Math.random()*15; // 도둑: 20~35초마다 60% 확률 (8웨이브부터 동시에 2명까지)
-    if (wave >= 2 && enemies.filter(o => o.type === 'thief').length < (wave >= 8 ? 2 : 1) && Math.random() < .6){ spawnEnemy('thief'); showNotice('금화 자루를 든 도둑이 나타났어요!', 0xffd166); sfx.coin(); }
-  }
+  runWaveCommands(director.tick(dt, enemies)); // 도둑 등장, 클리어 후 다음 웨이브 (게임 시간)
   const near = Math.hypot(p.x - SHOP_POS.x, p.z - (SHOP_POS.z - 1)) < 3.4;
   if (near !== shopNear){ shopNear = near; $('shopBtn').classList.toggle('hide', !near); $('shopBtn').textContent = isTouch ? '상점 열기' : 'E  상점 열기'; }
   if (slowT > 0){ slowT -= dt; $('slowFx').style.opacity = slowT > 0 ? 1 : 0; }
