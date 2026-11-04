@@ -2109,7 +2109,7 @@ function dropRider(e, r){ // 곤돌라에서 뛰어내려 낙하산을 펴고 �
 const AIRSHIP_FX = {
   pose(e){ e.g.rotation.set(0, e.yaw, Math.sin(e.t*.9)*.04); },
   fireArrow(e){ shootArrow(e.g, e.g.position.y - 2.2, yawObj.position, footY + 1.3, 26, .8); },
-  bow(e, hd){ sfx.bow(); },
+  bow(e, hd){ sfx.bow(hd); }, // 거리를 넘겨야 볼륨이 NaN이 되지 않음
   dropRider: (e, r) => dropRider(e, r),
 };
 function updateAirship(e, dt, p){
