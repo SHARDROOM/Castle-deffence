@@ -2790,7 +2790,7 @@ function resetBoss(){
 
 // ---------- 검: 베기, 패링, 그로기, 처형 ----------
 let swingFrom = null;
-const SWING = .36, PARRY_WIN = .4, PARRY_CD = 1;
+const SWING = .36, SWING_R = .22, PARRY_WIN = .4, PARRY_CD = 1; // SWING_R: 레이피어 베기 (짧고 절도 있게)
 let swingT = 0, swingDir = 1, swordHitT = 0, parryT = 0, parryCd = 0, parryHealed = false, parryHit = false, exec = null, rageT = 0, hitStopT = 0, lastPcool = null;
 const slashes = [], slashGeo = new THREE.PlaneGeometry(1, .045);
 function weaponUI(){
@@ -3171,6 +3171,7 @@ function swordAttack(){
   if (!swordOut){ drawSword(); drawHit = false; fireCd = W.rate/rateMul() + .1; sfx.swing(); return; } // 칼집에 있으면 뽑으면서 왼쪽 아래 → 오른쪽 위로 벰 (발도베기)
   drawSword(); fireCd = W.great ? Math.max(W.rate/rateMul(), SWING_G*.95) : W.rate / rateMul(); swingDir = -swingDir; // 대검은 한 번 다 휘두른 뒤 다음 베기
   if (W.great){ greatFrom = {x:SWC.x, y:SWC.y, z:SWC.z, q:SWC.q.clone()}; swingT = SWING_G; swordHitT = SWING_G*.47; setTimeout(() => sfx.bossSwing(.4), SWING_G*.3*1000); } // 대검: 정면을 지나는 순간 맞음
+  else if (W.rapier){ swingFrom = {x:SWC.x, y:SWC.y, z:SWC.z, q:SWC.q.clone()}; swingT = SWING_R; swordHitT = SWING_R*.42; setTimeout(() => sfx.swing(), SWING_R*.18*1000); } // 레이피어: 손목만 꺾어 짧고 빠르게
   else { swingFrom = {x:SWC.x, y:SWC.y, z:SWC.z, q:SWC.q.clone()}; swingT = SWING; swordHitT = SWING*.5; setTimeout(() => sfx.swing(), SWING*.26*1000); } // 젖힌 뒤 휘두를 때 소리, 정면을 지날 때 타격
 }
 function doSwordHit(trailAng, mul = 1){ // mul: 발도 공격 등 피해 배수
@@ -3637,6 +3638,16 @@ function animateSword(dt, dip){
     if (kw > .14 && kw < .58){ const u = (kw - .14)/.44; kw = .14 + u*u*.44; }
     const over = P(-.4, -.24, -.3, [-.72, .08, .68], [-.55, 0, .83]);   // 관성으로 조금 더 넘어감
     T = keyPose([[0, greatFrom || cock], [.14, pull], [.36, mid], [.58, end], [.68, over], [1, end]], kw);
+    snap = true;
+  } else if (swingT > 0 && W.rapier){ // 레이피어 베기: 손목만 옆으로 살짝 꺾었다가 → 몸 앞을 짧고 빠르게 가르고 → 칼끝이 앞을 향한 채 딱 멈췄다가 → 겨눔으로
+    const sd = swingDir, k = 1 - swingT/SWING_R;
+    const P = (x, y, z, b, e) => poseDir(x*sd, y, z, [b[0]*sd, b[1], b[2]], [e[0]*sd, e[1], e[2]]);
+    const cock = P(.3, -.12, -.46, [.55, .42, -.72], [-.6, -.1, -.8]);   // 손목을 바깥으로 꺾음 (칼끝은 앞쪽 위)
+    const cut = P(.02, -.14, -.7, [-.3, .12, -.95], [-1, -.1, 0]);       // 몸 앞을 가름
+    const stop = P(-.16, -.2, -.64, [-.5, .02, -.87], [-.8, -.2, .5]);   // 칼끝이 앞을 향한 채 멈춤 (흘리지 않음)
+    let kw = Math.max(0, k); if (kw > .2 && kw < .5){ const u = (kw - .2)/.3; kw = .2 + Math.sqrt(u)*.3; } // 가르는 구간은 처음부터 빠르게, 끝에서 탁 멈춤
+    T = keyPose([[0, swingFrom || cock], [.2, cock], [.5, stop], [.78, stop], [1, RAP_IDLE]], kw);
+    if (kw > .2 && kw < .5) T = keyPose([[.2, cock], [.36, cut], [.5, stop]], kw);
     snap = true;
   } else if (swingT > 0){ // 일본도 평타: ① 뒤로 젖혀 힘 모으기(천천히) → ② 앞을 지나는 호(가장 빠름, 타격) → ③ 반대쪽 아래로 흘리며 감속
     const sd = swingDir, k = 1 - swingT/SWING;
