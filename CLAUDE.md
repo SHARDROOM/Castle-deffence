@@ -23,3 +23,8 @@ Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/ag
 - `waves.js`: the wave director. Decides wave composition, the clear delay and thief spawns on game time, and returns commands that `index.html` executes.
 - `enemies.js`: soldier behaviour (movement, kiting, dodge rolls, melee and shooting) for regular enemies. Navigation and effects are injected; rendering stays in `index.html`. Also the boss (Iron Giant) state machine (`Enemies.bossStep`), the thief (`thiefStep`) and the airship (`airshipStep`).
 - Tests: `node --test` (Node 18+, no dependencies)
+- Browser check for new-run resets: `node tests/browser/run-reset.js` (needs Playwright; not part of `node --test`). Set `THREE_JS=<path to three.min.js r128>` when the CDN is unreachable.
+
+## Run state
+
+A new run (`resetGame` in `index.html`) resets state per subsystem: `resetWorld`, `armory.resetGear`, `resetGun`, `resetPlayer`, `resetLevels`, `resetBoss`, `resetSword`, `resetShop`, then `director.start`. When you add a variable that belongs to a run, reset it in the matching function, and run the browser reset check.
