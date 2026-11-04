@@ -342,3 +342,114 @@ test('보스: 광폭화하면 쿨타임이 1.7배 빨리 돈다', () => {
   Enemies.bossStep(e, 1, bossCtx(e, { x: 0, z: 0 }, { x: 0, z: 10 }));
   close(e.chargeCd, 5 - 1.7);
 });
+
+// ---------- 도둑 ----------
+const thief = (o = {}) => Object.assign({ type: 'thief', r: .37, speed: 6.2, yaw: 0, dir: dirVec(), chk: .8, lx: 0, lz: 0, unstuck: 0, ux: 0, uz: 0, slowT: 0 }, o);
+const coin = (x, z, v = 5, magnet = false) => ({ x, z, v, magnet });
+const thiefCtx = (e, pos, player, coins, o = {}) => {
+  const calls = [];
+  const world = { hasLOS: () => true, collide: () => {}, exitDir: (x, z, tx, tz, out) => { calls.push(['exitDir']); return out.set(1, 0, 0).normalize(); } };
+  const fx = { takeCoin: (c, i) => { calls.push(['takeCoin', i]); coins.splice(i, 1); }, escape: () => calls.push(['escape']) };
+  return Object.assign({ pos, player, dist: Math.hypot(player.x - pos.x, player.z - pos.z), rng: () => .5, coins, coinPos: c => c, world, fx, calls }, o);
+};
+
+test('도둑: 가장 가까운 금화로 간다', () => {
+  const e = thief(), pos = { x: 0, z: 0 }, coins = [coin(0, 10), coin(-3, 0)];
+  const r = Enemies.thiefStep(e, .1, thiefCtx(e, pos, { x: 20, z: 20 }, coins));
+  close(r.dx, -1); assert.ok(pos.x < 0);
+});
+
+test('도둑: 지나가며 금화를 주워 훔친 골드에 더한다', () => {
+  const e = thief(), pos = { x: 0, z: 0 }, coins = [coin(0.5, 0, 7), coin(10, 0, 3)];
+  const ctx = thiefCtx(e, pos, { x: 20, z: 20 }, coins);
+  Enemies.thiefStep(e, .01, ctx);
+  assert.equal(e.stolen, 7); assert.deepEqual(ctx.calls, [['takeCoin', 0]]); assert.equal(coins.length, 1);
+});
+
+test('도둑: 끌려오는(magnet) 금화는 무시', () => {
+  const e = thief(), pos = { x: 0, z: 0 }, coins = [coin(0.5, 0, 7, true)];
+  Enemies.thiefStep(e, .01, thiefCtx(e, pos, { x: 20, z: 20 }, coins));
+  assert.equal(e.stolen, undefined); assert.equal(coins.length, 1);
+});
+
+test('도둑: 금화가 없으면 4초 뒤부터 성문으로 달아남, 25초가 지나면 금화도 무시', () => {
+  const e = thief({ thiefT: 4 }), pos = { x: 0, z: 0 };
+  Enemies.thiefStep(e, .1, thiefCtx(e, pos, { x: 20, z: 20 }, []));
+  assert.equal(e.leaving, true); assert.ok(pos.z < 0); // 성문은 z = -27.6
+  const late = thief({ thiefT: 25 }), p2 = { x: 0, z: 0 };
+  Enemies.thiefStep(late, .1, thiefCtx(late, p2, { x: 20, z: 20 }, [coin(0, 5)]));
+  assert.equal(late.leaving, true);
+});
+
+test('도둑: 플레이어가 7m 안으로 오면 피한다', () => {
+  const e = thief(), pos = { x: 0, z: 0 };
+  const r = Enemies.thiefStep(e, .1, thiefCtx(e, pos, { x: 0, z: 3 }, [coin(0, 10)]));
+  assert.ok(r.dz < 0); // 금화(+z)보다 플레이어 반대쪽(-z)으로
+});
+
+test('도둑: 성문까지 막혀 있으면 길찾기 (가까이 플레이어가 있으면 피하기 우선)', () => {
+  const e = thief({ thiefT: 5 }), pos = { x: 0, z: 0 };
+  const ctx = thiefCtx(e, pos, { x: 20, z: 20 }, []);
+  ctx.world.hasLOS = () => false;
+  const r = Enemies.thiefStep(e, .1, ctx);
+  assert.deepEqual(ctx.calls, [['exitDir']]); close(r.dx, 1); assert.ok(r.flow);
+});
+
+test('도둑: 성문에 닿으면 빠져나감', () => {
+  const e = thief({ thiefT: 5, leaving: true }), pos = { x: 0, z: -27 };
+  const ctx = thiefCtx(e, pos, { x: 20, z: 20 }, []);
+  const r = Enemies.thiefStep(e, .01, ctx);
+  assert.equal(r.escaped, true); assert.deepEqual(ctx.calls, [['escape']]);
+});
+
+// ---------- 비행선 ----------
+const airship = (o = {}) => Object.assign({ type: 'airship', airship: true, speed: 3.2, yaw: 0, t: 0, dir: dirVec(), shoot: 3, dropT: 0, dying: false, fallV: 0, slowT: 0, riders: [], archer: null }, o);
+const airCtx = (e, pos, player, o = {}) => {
+  const calls = [];
+  const fx = { pose: () => calls.push(['pose']), fireArrow: () => calls.push(['fireArrow']), bow: (en, hd) => calls.push(['bow', hd]), dropRider: (en, r) => calls.push(['dropRider', r.type]) };
+  return Object.assign({ pos, player, footY: 0, rng: () => .5, meleeRiders: ['speed', 'heavy', 'dodger'], fx, calls }, o);
+};
+
+test('비행선: 멀면(16m 초과) 플레이어 쪽으로 다가오고 높이 11m 근처를 유지', () => {
+  const e = airship(), pos = { x: 0, y: 11, z: 0 };
+  Enemies.airshipStep(e, .5, airCtx(e, pos, { x: 0, z: 40 }));
+  assert.ok(pos.z > 0); assert.ok(Math.abs(pos.y - 11) <= .4);
+});
+
+test('비행선: 가까우면 반지름 14m로 선회', () => {
+  const e = airship(), pos = { x: 14, y: 11, z: 0 };
+  e.dir.set(0, 0, 1);
+  for (let i = 0; i < 200; i++) Enemies.airshipStep(e, .05, airCtx(e, pos, { x: 0, z: 0 }));
+  const r = Math.hypot(pos.x, pos.z); assert.ok(r > 10 && r < 18, `radius ${r}`);
+});
+
+test('비행선: 궁수가 40m 안이면 2.2~3.2초마다 쏘고, 활 소리에 거리를 넘긴다', () => {
+  const e = airship({ archer: {}, shoot: 0 }), pos = { x: 0, y: 11, z: 0 };
+  const ctx = airCtx(e, pos, { x: 0, z: 20 });
+  Enemies.airshipStep(e, .01, ctx);
+  assert.deepEqual(ctx.calls.filter(c => c[0] !== 'pose').map(c => c[0]), ['fireArrow', 'bow']);
+  assert.ok(ctx.calls.find(c => c[0] === 'bow')[1] > 0); // 거리(hd)가 숫자로 전달됨
+  assert.equal(e.shoot, 2.7);
+});
+
+test('비행선: 13m 안으로 오면 근접병이 0.7초 간격으로 강하 (궁수·기수는 안 내림)', () => {
+  const e = airship({ riders: [{ type: 'banner' }, { type: 'speed' }, { type: 'heavy' }] }), pos = { x: 0, y: 11, z: 0 };
+  const ctx = airCtx(e, pos, { x: 0, z: 5 });
+  Enemies.airshipStep(e, .01, ctx);
+  assert.deepEqual(ctx.calls.filter(c => c[0] === 'dropRider'), [['dropRider', 'speed']]);
+  assert.equal(e.dropT, .7); assert.deepEqual(e.riders.map(r => r.type), ['banner', 'heavy']);
+});
+
+test('비행선: 몸체 회전(pose)은 강하보다 먼저 맞춘다', () => {
+  const e = airship({ riders: [{ type: 'speed' }] }), pos = { x: 0, y: 11, z: 0 };
+  const ctx = airCtx(e, pos, { x: 0, z: 5 });
+  Enemies.airshipStep(e, .01, ctx);
+  assert.deepEqual(ctx.calls.map(c => c[0]), ['pose', 'dropRider']);
+});
+
+test('비행선: 격추되면 가속하며 떨어지다가 1.2m 아래에서 crashed', () => {
+  const e = airship({ dying: true }), pos = { x: 0, y: 11, z: 0 };
+  let r, n = 0;
+  do { r = Enemies.airshipStep(e, .05, airCtx(e, pos, { x: 0, z: 0 })); n++; } while (!r.crashed && n < 200);
+  assert.equal(r.dying, true); assert.ok(pos.y <= 1.2); assert.ok(n > 10 && n < 60, `frames ${n}`);
+});

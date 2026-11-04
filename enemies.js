@@ -306,7 +306,88 @@
     return v;
   }
 
-  const Enemies = { move, attack, rollPose, Vec, ROLL_TIME, bossStep, setBossState, startLeaps };
+  // ---------- 도둑: 공격하지 않고 금화를 주워 담다가 성문으로 달아남 ----------
+  const THIEF_EXIT = { x: 0, z: -27.6 };
+  //   ctx = {pos, player:{x,z}, dist, rng, coins, coinPos(c),
+  //          world:{hasLOS, collide, exitDir(x, z, tx, tz, out)},
+  //          fx:{takeCoin(c, i), escape(e)}}
+  //   반환: {escaped, dx, dz, flow}
+  //     escaped = 성문으로 빠져나감 (그리기 생략)
+  //     dx, dz, flow = 이번 프레임의 목표 방향과 길찾기 결과 (index.html의 전역 tmp·tmp2에 그대로 복사)
+  function thiefStep(e, dt, ctx) {
+    const g = ctx.pos, p = ctx.player, dist = ctx.dist, W = ctx.world;
+    e.thiefT = (e.thiefT || 0) + dt;
+    let best = null, bd = 1e9;
+    if (e.thiefT < 25) for (const c of ctx.coins) { if (c.magnet) continue; const cp = ctx.coinPos(c), d = Math.hypot(cp.x - g.x, cp.z - g.z); if (d < bd) { bd = d; best = c; } }
+    const bp = best && ctx.coinPos(best);
+    const tx = best ? bp.x : THIEF_EXIT.x, tz = best ? bp.z : THIEF_EXIT.z;
+    if (!best && e.thiefT > 4) e.leaving = true; // 주울 금화가 없으면 달아남
+    let dx = tx - g.x, dz = tz - g.z, l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+    if (dist < 7) { // 플레이어가 다가오면 피함
+      const ax = (g.x - p.x) / (dist || 1), az = (g.z - p.z) / (dist || 1);
+      dx = dx * .4 + ax * .9; dz = dz * .4 + az * .9; l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+    }
+    let flow = null;
+    if (!best && !W.hasLOS(g.x, g.z, tx, tz, .5)) { // 성문까지 막혀 있으면 길찾기로 돌아감
+      flow = W.exitDir(g.x, g.z, tx, tz, new Vec());
+      if (dist >= 7) { dx = flow.x; dz = flow.z; }
+    }
+    if (e.unstuck > 0) { e.unstuck -= dt; dx = e.ux; dz = e.uz; }
+    e.dir.lerp(new Vec(dx, 0, dz), Math.min(1, dt * 6)).normalize();
+    const sp = e.speed * (e.slowT > 0 ? .4 : 1);
+    g.x += e.dir.x * sp * dt; g.z += e.dir.z * sp * dt;
+    W.collide(g, e.r);
+    e.chk -= dt;
+    if (e.chk <= 0) {
+      if (Math.hypot(g.x - e.lx, g.z - e.lz) < sp * .25) { const a = ctx.rng() * Math.PI * 2; e.ux = Math.cos(a); e.uz = Math.sin(a); e.unstuck = .5; }
+      e.lx = g.x; e.lz = g.z; e.chk = .8;
+    }
+    for (let i = ctx.coins.length - 1; i >= 0; i--) { // 지나가며 금화를 주워 자루에 담음
+      const c = ctx.coins[i]; if (c.magnet) continue;
+      const cp = ctx.coinPos(c);
+      if (Math.hypot(cp.x - g.x, cp.z - g.z) < .9) { e.stolen = (e.stolen || 0) + c.v; ctx.fx.takeCoin(c, i); }
+    }
+    if (e.leaving && Math.hypot(g.x - THIEF_EXIT.x, g.z - THIEF_EXIT.z) < 1.6) { // 성문으로 빠져나감
+      ctx.fx.escape(e);
+      return { escaped: true, dx, dz, flow };
+    }
+    let dy = Math.atan2(e.dir.x, e.dir.z) - e.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); e.yaw += dy * Math.min(1, dt * 12);
+    return { escaped: false, dx, dz, flow };
+  }
+
+  // ---------- 비행선: 플레이어 주위를 선회하며 궁수가 쏘고, 가까이 오면 근접병이 강하 ----------
+  //   ctx = {pos, player:{x,z}, footY, rng, meleeRiders,
+  //          fx:{pose(e), fireArrow(e), bow(e, hd), dropRider(e, rider)}}
+  //   반환: {dying, crashed}  (추락 중이면 높이만 바꾸고, 땅에 닿으면 crashed)
+  function airshipStep(e, dt, ctx) {
+    const g = ctx.pos, p = ctx.player, rng = ctx.rng;
+    e.t += dt;
+    if (e.dying) { // 격추: 떨어지다가 땅에 닿으면 폭발 (연출은 index.html)
+      e.fallV += 9 * dt; g.y -= e.fallV * dt;
+      return { dying: true, crashed: g.y <= 1.2 };
+    }
+    // 이동: 플레이어 쪽으로 다가와 반지름 14m로 천천히 선회
+    const dx = p.x - g.x, dz = p.z - g.z, hd = Math.hypot(dx, dz);
+    let tx, tz;
+    if (hd > 16) { tx = dx / hd; tz = dz / hd; }
+    else { const a = Math.atan2(g.z - p.z, g.x - p.x) + .35; tx = (p.x + Math.cos(a) * 14 - g.x); tz = (p.z + Math.sin(a) * 14 - g.z); const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l; }
+    e.dir.x += (tx - e.dir.x) * Math.min(1, dt * .8); e.dir.z += (tz - e.dir.z) * Math.min(1, dt * .8);
+    const sp = e.speed * (e.slowT > 0 ? .5 : 1);
+    g.x += e.dir.x * sp * dt; g.z += e.dir.z * sp * dt; g.y = 11 + Math.sin(e.t * .7) * .4;
+    const ty = Math.atan2(e.dir.x, e.dir.z); let dy = ty - e.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); e.yaw += dy * Math.min(1, dt * 1.2);
+    ctx.fx.pose(e); // 몸체 회전을 먼저 맞춤 (강하하는 근접병의 위치가 곤돌라의 실제 위치에서 나옴)
+    // 궁수가 곤돌라에서 화살을 쏨
+    e.shoot -= dt;
+    if (e.archer && e.shoot <= 0 && hd < 40) { e.shoot = 2.2 + rng(); ctx.fx.fireArrow(e); ctx.fx.bow(e, hd); }
+    // 플레이어 근처로 오면 근접병들이 차례로 강하
+    if (hd < 13 && e.riders.some(r => ctx.meleeRiders.includes(r.type))) {
+      e.dropT -= dt;
+      if (e.dropT <= 0) { const i = e.riders.findIndex(r => ctx.meleeRiders.includes(r.type)); ctx.fx.dropRider(e, e.riders[i]); e.riders.splice(i, 1); e.dropT = .7; }
+    }
+    return { dying: false, crashed: false };
+  }
+
+  const Enemies = { move, attack, rollPose, Vec, ROLL_TIME, bossStep, setBossState, startLeaps, thiefStep, airshipStep, THIEF_EXIT };
   if (typeof module !== 'undefined' && module.exports) module.exports = Enemies;
   else root.Enemies = Enemies;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
