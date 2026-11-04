@@ -36,6 +36,7 @@
     flame: P({ shield: 'half', flash: false }), // 화염방사기
     burn: P({ mul: false, flash: false }),  // 화상 지속 피해
     slash: P({ shield: 'mul' }),            // 검 휘두르기
+    thrust: P({ shield: 'mul' }),           // 레이피어 찌르기 (방패 정면이면 베기처럼 줄어듦)
     wave: P({ shield: 'mul', killSkill: false }), // 검기: 처치해도 스킬 게이지 없음
     guardSlash: P({ shield: 'mul' }),       // 수호자 가드 해제 연속 베기
     greatSlash: P({ shield: 'mul' }),       // 대검 반격

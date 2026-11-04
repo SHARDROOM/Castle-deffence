@@ -169,3 +169,31 @@ test('부품 효과 글: 효과가 없으면 "효과 없음"', () => {
   assert.equal(Armory.partEffectText({ mod: {} }, 1), '효과 없음');
   assert.match(Armory.partEffectText(Armory.findPart('muzzle', 'brake'), 1), /반동/);
 });
+
+// ---------- 레이피어 ----------
+test('레이피어 부품: 날·가드·손잡이의 스탯과 표시', () => {
+  const a = rich(1e5);
+  a.equip('sword', 'blade', 'rapierb');
+  let w = Armory.weaponStats('sword', undefined, a.gear);
+  assert.equal(w.rapier, true); close(Armory.WEAPONS.sword.rate / w.rate, 1.35);
+  assert.equal(w.parryPow, 60); assert.equal(w.parryRange, 8);
+  a.equip('sword', 'guard', 'rapierg'); a.equip('sword', 'grip', 'rapierh');
+  w = Armory.weaponStats('sword', undefined, a.gear);
+  assert.equal(w.rapierGuard, true); assert.equal(w.rapierGrip, true);
+  close(Armory.WEAPONS.sword.rate / w.rate, 1.35 * 1.2); close(w.moveMul, 1.12); assert.equal(w.parryPow, 40);
+  assert.match(Armory.partEffectText(Armory.findPart('blade', 'rapierb'), 1), /정밀 흘리기/);
+});
+
+test('레이피어 가드·손잡이만 달면 일반 날 그대로 (찌르기·흘리기 없음)', () => {
+  const a = rich(1e5); a.equip('sword', 'guard', 'rapierg'); a.equip('sword', 'grip', 'rapierh');
+  assert.ok(!Armory.weaponStats('sword', undefined, a.gear).rapier);
+});
+
+test('연속 찌르기 횟수 = 반올림(3 × 공격 속도 배율), 최대 8번', () => {
+  const at = (eq, rateMul) => { const a = rich(1e5); return Armory.thrustCount(Armory.weaponStats('sword', eq, a.gear), rateMul); };
+  assert.equal(at({}, 1), 3);                                  // 기본 일본도 속도면 3번
+  assert.equal(at({ blade: 'rapierb' }, 1), 4);                // 1.35배
+  assert.equal(at({ blade: 'rapierb', guard: 'rapierg' }, 1), 5); // 1.62배
+  assert.equal(at({ blade: 'rapierb', guard: 'rapierg' }, 1.15), 6); // 아드레날린
+  assert.equal(at({ blade: 'rapierb', guard: 'rapierg' }, 3), 8);    // 최대 8번
+});

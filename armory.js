@@ -74,14 +74,17 @@
     blade: [
       {id:'greatb', name:'대검날', price:280, desc:'넓고 두꺼운 대검 날: 공격 속도 크게 감소, 피해·패링(가드) 강도 크게 증가, 베기 사거리 +0.6m. 대신 패링 실패 시 대기 +2초, 구르기 쿨타임 +1초. 지키는 자와 함께면 가드 때 칼을 땅에 꽂고 버팀', mod:{great:1, blade:1.15, rate:1.8, dmg:2.2, parryPow:60, rangeAdd:.6, parryCdAdd:2, rollCdAdd:1}},
       {id:'longb',  name:'연장 도신', price:200, desc:'칼이 길어짐: 베기 사거리 +0.8m, 패링 사거리 +1.5m, 공격 속도 -20%', mod:{rangeAdd:.8, parryRangeAdd:1.5, rate:1.25, blade:1.35}},
-      {id:'shortb', name:'도신 단축', price:160, desc:'칼이 아주 짧아짐: 이동 속도 +25%, 공격 속도 +60%, 베기 사거리 -55%, 패링 강도 -40', mod:{move:1.25, rate:1/1.6, rangeMul:.45, parryPow:-40, blade:.45}}
+      {id:'shortb', name:'도신 단축', price:160, desc:'칼이 아주 짧아짐: 이동 속도 +25%, 공격 속도 +60%, 베기 사거리 -55%, 패링 강도 -40', mod:{move:1.25, rate:1/1.6, rangeMul:.45, parryPow:-40, blade:.45}},
+      {id:'rapierb', name:'레이피어 날', price:240, desc:'은색의 얇고 뾰족한 찌르기 검: 공격 속도 +35%, 패링 강도 -40, 패링 사거리 +2m. 패링 대신 정밀 흘리기 (적 공격이 닿기 직전에 공격 버튼을 한 번 누르면 날로 빗겨 쳐냄). 공격 버튼을 누르고 있으면 좌우로 벤 뒤 연속 찌르기 (공격 속도가 빠를수록 더 많이). 지키는 자와 함께면 날을 세워 가드', mod:{rapier:1, rate:1/1.35, parryPow:-40, parryRangeAdd:2, blade:1.15}}
     ],
     guard: [
-      {id:'noguard', name:'가드 제거', price:140, desc:'패링 유예 0.4 → 0.15초, 패링 쿨타임 -0.4초, 공격 속도 +40%', mod:{parryWin:.15, parryCdAdd:-.4, rate:1/1.4, guard:0}, maxLv:5}
+      {id:'noguard', name:'가드 제거', price:140, desc:'패링 유예 0.4 → 0.15초, 패링 쿨타임 -0.4초, 공격 속도 +40%', mod:{parryWin:.15, parryCdAdd:-.4, rate:1/1.4, guard:0}, maxLv:5},
+      {id:'rapierg', name:'레이피어 가드', price:150, desc:'손을 감싸는 은색 돔 모양 가드: 공격 속도 +20%', mod:{rate:1/1.2, rapierGuard:1}}
     ],
     grip: [
       {id:'longg',  name:'연장 손잡이', price:150, desc:'손잡이가 길어짐: 베기 사거리 +0.5m, 패링 사거리 +1m', mod:{rangeAdd:.5, parryRangeAdd:1, grip:1.4}},
-      {id:'shortg', name:'단축 손잡이', price:120, desc:'이동 속도 +10%, 공격 속도 +15%, 패링 강도 -20', mod:{move:1.1, rate:1/1.15, parryPow:-20, grip:.6}}
+      {id:'shortg', name:'단축 손잡이', price:120, desc:'이동 속도 +10%, 공격 속도 +15%, 패링 강도 -20', mod:{move:1.1, rate:1/1.15, parryPow:-20, grip:.6}},
+      {id:'rapierh', name:'레이피어 손잡이', price:130, desc:'은색 줄을 감은 가죽 손잡이: 이동 속도 +12%, 패링 강도 -20', mod:{move:1.12, parryPow:-20, rapierGrip:1}}
     ],
     saya: [ // 검집
       {id:'basicsaya', name:'기본 검집', price:100, desc:'칼을 칼집에 넣은 상태(납도)로 패링하거나 가드하면 패링 강도 +30', mod:{sheathPow:30}}
@@ -147,6 +150,7 @@
     if (m.parryWin) out.push(`패링 유예 ${m.parryWin.toFixed(2)}초`);
     if (m.parryCdAdd) out.push(`패링 쿨타임 ${m.parryCdAdd.toFixed(2)}초`);
     if (m.crave) out.push(`적중 회복 ${(.6*f).toFixed(2)}`, `처치 회복 ${(5*f).toFixed(1)}`);
+    if (m.rapier) out.push('패링 대신 정밀 흘리기', '누르고 있으면 연속 찌르기');
     if (part.skill) out.push(`스킬 위력 ×${f.toFixed(1)}`);
     if (m.dual) out.push('쌍권총');
     return out.join(' · ') || '효과 없음';
@@ -195,6 +199,9 @@
         if (m.sheathPow) w.sheathPow = (w.sheathPow || 0) + m.sheathPow;
         if (m.dmg) w.dmg *= m.dmg;
         if (m.great) w.great = true;
+        if (m.rapier) w.rapier = true;           // 레이피어 날: 찌르기·정밀 흘리기, 패링 불가
+        if (m.rapierGuard) w.rapierGuard = true; // 은색 돔 가드 (모양)
+        if (m.rapierGrip) w.rapierGrip = true;   // 은색 줄 손잡이 (모양)
         if (m.rollCdAdd) w.rollCdAdd = (w.rollCdAdd || 0) + m.rollCdAdd;
       }
       return w;
@@ -228,6 +235,12 @@
   }
 
   // 쌍권총에는 조준기를 달 수 없다 (규칙은 여기 한 곳)
+  // 레이피어 연속 찌르기 횟수: 3 × 공격 속도 배율(기본 일본도 대비, 증강·아드레날린 포함), 최대 8번
+  function thrustCount(w, rateMul = 1) {
+    const speed = WEAPONS.sword.rate / w.rate * rateMul;
+    return Math.max(1, Math.min(8, Math.round(3 * speed)));
+  }
+
   function scopeAllowed(eq) { return !eq || eq.conv !== 'dual'; }
 
   // ---------- 회복템: 붕대, 아드레날린, 구급상자 ----------
@@ -285,7 +298,7 @@
   }
 
   const Armory = {
-    create, weaponStats, scopeAllowed, lvOf, upCost, maxLvOf, modOf, partEffectText, findPart, partsFor,
+    create, weaponStats, thrustCount, scopeAllowed, lvOf, upCost, maxLvOf, modOf, partEffectText, findPart, partsFor,
     WEAPONS, SPECIALS, PARTS, ITEMS, MOUNT_Y, SIGHT_OFF, GUN_SLOTS, SLOT_NAMES, SWORD_SLOTS, MAX_LV,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Armory;
