@@ -3206,7 +3206,10 @@ function openDeflect(){ // 정밀 흘리기 창
   markParryProjectiles();
 }
 function startThrust(){ // 팔을 L자로 몸에 붙였다가 연속 찌르기 (공격 속도가 빠를수록 더 많이)
-  thrust = {n: Armory.thrustCount(W, rateMul()), i: 0, t: 0}; fireCd = THRUST_DUR;
+  const n = Armory.thrustCount(W, rateMul());
+  // 찌를 곳: 조준점 주변 위·아래·좌·우로 조금씩 다르게 (보이는 동작만, 판정은 앞쪽 좁은 범위 그대로)
+  const aims = []; for (let i=0;i<n;i++){ const a = Math.random()*Math.PI*2, r = .12 + Math.random()*.22; aims.push({x:Math.cos(a)*r, y:Math.sin(a)*r*.75}); }
+  thrust = {n, i: 0, t: 0, aims}; fireCd = THRUST_DUR;
   thrustFrom = {x:SWC.x, y:SWC.y, z:SWC.z, q:SWC.q.clone()};
 }
 let thrustFrom = null;
@@ -3617,10 +3620,15 @@ function animateSword(dt, dip){
     const kk = knockAmt(); T = poseDir(.02 + kk*.03, -.24 + kk*.03, -.5, [kk*.15, 1, -.08], [1, 0, 0]);
   } else if (guarding && !sheathParry){ // 발도 가드: 칼을 가로로 눕혀 들고, 왼손등으로 칼등을 받침 (막을 때마다 살짝 튕김)
     const kk = knockAmt(); T = {x:.12 + kk*.04, y:-.1 + kk*.04, z:-.46, rx:-.12 - kk*.15, ry:0, rz:1.5 + kk*.3 + Math.sin(performance.now()/90)*.008};
-  } else if (thrust){ // 레이피어 연속 찌르기: 팔을 L자로 몸에 붙였다가 곧게 뻗기를 반복
-    const L = poseDir(.2, -.24, -.42, [-.08, .1, -1], [1, 0, 0]), X = poseDir(.06, -.14, -.88, [-.03, .05, -1], [1, 0, 0]); // L: 팔꿈치를 옆구리에 붙이고 칼을 당김, X: 곧게 뻗음
-    const per = THRUST_DUR/thrust.n, k = Math.min(1, (thrust.t % per)/per);
-    T = thrust.t < per*.2 ? lerpPose(thrustFrom || L, L, thrust.t/(per*.2)) : keyPose([[0, L], [.35, X], [.55, X], [1, L]], k); snap = true;
+  } else if (thrust){ // 레이피어 연속 찌르기: 아래팔을 세워 손을 눈높이로 들고, 칼을 수평으로 당겼다가 조준점 주변 여기저기를 찌름
+    const per = THRUST_DUR/thrust.n, i = Math.min(thrust.n - 1, Math.floor(thrust.t/per)), k = Math.min(1, (thrust.t - i*per)/per);
+    const aim = thrust.aims[i];
+    // 당김: 손은 눈높이 오른쪽, 칼은 화면을 가로지르듯 거의 수평으로 가운데를 향함 (칼날이 길게 보이게)
+    const L = poseDir(.36, -.05, -.52, [-.88, .02, -.47], [0, 1, 0]);
+    // 뻗음: 손을 앞쪽 가운데로 내밀며 칼끝을 찌를 곳으로 (조준점 주변 여기저기, 칼은 비스듬히 보임)
+    const hx = .2 + aim.x*.3, hy = -.03 + aim.y*.3, hz = -.66;
+    const X = poseDir(hx, hy, hz, [aim.x*1.4 - hx - .5, aim.y*1.4 - hy, -.62], [0, 1, 0]);
+    T = thrust.t < per*.2 && i === 0 ? lerpPose(thrustFrom || L, L, thrust.t/(per*.2)) : keyPose([[0, L], [.35, X], [.55, X], [1, L]], k); snap = true;
   } else if (rapierFlickT > 0){ // 정밀 흘리기: 날로 상대 공격을 바깥으로 살짝 빗겨 쳐냄
     const k = 1 - rapierFlickT/.22;
     T = keyPose([[0, RAP_IDLE], [.35, poseDir(-.04, -.16, -.6, [.4, .38, -.83], [1, 0, 0])], [1, RAP_IDLE]], k); snap = true;
