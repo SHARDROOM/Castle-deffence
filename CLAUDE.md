@@ -26,6 +26,10 @@ Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/ag
 - Versions: `index.html` loads each local script as `name.js?v=<content hash>` so browsers and GitHub Pages never mix a new `index.html` with an old module, and shows a build version at the bottom left (`#buildVer`, `v<date> · <hash of index.html + scripts>`). After changing `index.html` or any local `.js` file, run `node tools/asset-version.js --write` (`node --test` fails until you do).
 - Browser check for new-run resets: `node tests/browser/run-reset.js` (needs Playwright; not part of `node --test`). Set `THREE_JS=<path to three.min.js r128>` when the CDN is unreachable.
 
+## Deployment
+
+GitHub Pages is deployed by `.github/workflows/pages.yml` (Settings → Pages → Source: GitHub Actions) on every push to `main`, after `node --test` passes. It publishes `index.html` and the root `*.js` files only. To redeploy without a change, run the "Deploy to Pages" workflow manually.
+
 ## Run state
 
 A new run (`resetGame` in `index.html`) resets state per subsystem: `resetWorld`, `armory.resetGear`, `resetGun`, `resetPlayer`, `resetLevels`, `resetBoss`, `resetSword`, `resetShop`, then `director.start`. When you add a variable that belongs to a run, reset it in the matching function, and run the browser reset check.
