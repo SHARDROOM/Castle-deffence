@@ -942,6 +942,7 @@ let gunModel = null;
 const SM = (color, metalness, roughness, extra) => new THREE.MeshStandardMaterial(Object.assign({color, metalness, roughness}, extra || {}));
 const GM = {
   metal: SM(0x3a3d44, .75, .38), dark: SM(0x202227, .6, .5), black: SM(0x0e0f12, .3, .7), steel: SM(0x9aa0a8, .9, .22),
+  silver: SM(0xf2f4f7, .5, .26), silverDark: SM(0xb4bcc6, .55, .32), silverShell: SM(0xf2f4f7, .5, .26, {side:THREE.DoubleSide}), // 레이피어 부품
   poly: SM(0x3b3f37, 0, .78), tan: SM(0x8a7a5c, 0, .8),
   wood: SM(0xffffff, 0, .55, {map: TEX.wood ? (() => { const t = TEX.wood.clone(); t.needsUpdate = true; t.repeat.set(1, 3); t.rotation = Math.PI/2; return t; })() : null, color: TEX.wood ? 0xc08a5a : 0x7a4a24}),
   woodD: SM(0x5a3418, 0, .6), brass: SM(0xc9a24a, 1, .3), red: SM(0xa8352b, .2, .45),
@@ -1357,15 +1358,55 @@ function buildGreatBlade(g, w){ // 대검 날: 하바키 바로 위에서 시작
   }
   return {bl, base};
 }
+// ---------- 레이피어 부품: 은색 날·돔 가드·은줄 손잡이·곧은 가죽 검집 ----------
+function rapierGrip(g, top, hl, gs){ // 검은 가죽에 은색 줄을 감은 손잡이 + 은 구슬 폼멜
+  const leather = new THREE.Mesh(new THREE.CylinderGeometry(.018, .02, hl, 10), new THREE.MeshLambertMaterial({color:0x2a1d16}));
+  leather.position.y = top - hl/2; g.add(leather);
+  const wire = GM.silver, n = Math.max(4, Math.round(9*gs));
+  for (let i=0;i<n;i++){ const ring = new THREE.Mesh(new THREE.TorusGeometry(.0195, .0026, 4, 12), wire); ring.rotation.set(Math.PI/2, .35, 0); ring.position.y = top - .02 - i*(hl - .04)/(n - 1); g.add(ring); }
+  const pommel = new THREE.Mesh(new THREE.SphereGeometry(.026, 12, 8), GM.silver); pommel.position.y = top - hl - .02; g.add(pommel);
+}
+function rapierGuard(g, top, hl){ // 손을 감싸는 은색 돔(컵) + 십자 막대 + 손등 보호대
+  const silver = GM.silver, shell = GM.silverShell;
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(.062, 20, 10, 0, Math.PI*2, 0, Math.PI/2), shell);
+  dome.scale.y = .8; dome.position.y = .118; g.add(dome);                     // 볼록한 쪽이 칼날, 열린 쪽이 손
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(.062, .004, 6, 24), silver); rim.rotation.x = Math.PI/2; rim.position.y = .118; g.add(rim);
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(.007, .007, .17), silver); bar.position.y = .125; g.add(bar); // 십자 막대
+  for (const sz of [-1, 1]){ const k = new THREE.Mesh(new THREE.SphereGeometry(.009, 8, 6), silver); k.position.set(0, .125, sz*.087); g.add(k); }
+  const bow = new THREE.CatmullRomCurve3([new THREE.Vector3(.058, .12, 0), new THREE.Vector3(.07, .06, 0), new THREE.Vector3(.055, top - hl*.6, 0), new THREE.Vector3(.022, top - hl - .01, 0)]);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(bow, 16, .0045, 6), silver));    // 손등 보호대 (가드에서 폼멜까지)
+}
+function rapierBlade(g, w){ // 곧고 가는 은색 찌르기 날 + 뾰족한 끝. 반환: 날 끝(뾰족한 끝 제외) 위치
+  const bs = w.bladeScale, L = .15*bs, BL = 7*L, steel = GM.silver, ridge = w.crave ? new THREE.MeshLambertMaterial({color:0xff5a5a}) : GM.silverDark;
+  const ric = new THREE.Mesh(new THREE.BoxGeometry(.016, .034, .012), GM.silverDark); ric.position.y = .175; g.add(ric); // 리카소
+  for (let i=0;i<7;i++){
+    const cy = .19 + (i + .5)*L, wd = .019 - i*.0016;
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(wd, L + .004, .006), steel); seg.position.y = cy; g.add(seg);
+    const rg = new THREE.Mesh(new THREE.BoxGeometry(.003, L + .004, .008), ridge); rg.position.y = cy; g.add(rg); // 가운데 능선
+  }
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(.006, .075, 4), steel); tip.position.y = .19 + BL + .037; g.add(tip);
+  return {by0:.19 + BL};
+}
+function rapierSaya(g, bs, deco){ // 곧고 가는 검은 가죽 검집 + 은색 입구·끝 장식 (칼과 같은 좌표계: +y가 칼끝 방향)
+  const leather = SM(0x1a1412, 0, .6), silver = GM.silver, L = .15*bs, BL = 7*L;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(.032, BL + .02, .024), leather); body.position.y = .175 + BL/2; g.add(body);
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(.038, .04, .03), silver); mouth.position.y = .185; g.add(mouth);     // 입구
+  const end = new THREE.Mesh(new THREE.ConeGeometry(.02, .07, 4), silver); end.rotation.y = Math.PI/4; end.position.y = .175 + BL + .03; g.add(end); // 끝 장식
+  if (deco) for (const yy of [.38, .62]){ const band = new THREE.Mesh(new THREE.BoxGeometry(.036, .014, .028), silver); band.position.y = yy*bs + .1; g.add(band); }
+}
 function buildKatana(g, eq = {}){ // 일본도: 손잡이가 원점, 칼날은 +y 방향으로 살짝 휘어짐 (대검날이면 서양식 대검)
   const w = makeWeapon('sword', eq), bs = w.bladeScale, gs = w.gripScale;
   if (w.great){ // 대검날: 손잡이·코등이 등 일본도 부분은 그대로, 날만 넓고 곧은 대검 날로 (하바키를 넓혀 자연스럽게 이어 붙임)
     const hl = .3*gs, top = w.guard ? .13 : .152;
-    g.add(box(.04,hl,.032,0x1c1a22,0,top - hl/2,0));
-    const nd = Math.max(2, Math.round(5*gs));
-    for (let i=0;i<nd;i++){ const dmd = box(.018,.018,.036,0xe8e0cc,0,top - .04 - i*(hl - .06)/Math.max(1, nd - 1),0); dmd.rotation.z = Math.PI/4; g.add(dmd); }
-    g.add(box(.05,.03,.04,0x8a8f98,0,top - hl - .015,0));
-    if (w.guard){ const tsuba = new THREE.Mesh(new THREE.CylinderGeometry(.13,.13,.02,22), new THREE.MeshLambertMaterial({color:0x2b2830})); tsuba.scale.z = .75; tsuba.position.y = .14; g.add(tsuba); } // 넓은 날에 맞춰 조금 큰 타원 코등이
+    if (w.rapierGrip) rapierGrip(g, top, hl, gs);
+    else {
+      g.add(box(.04,hl,.032,0x1c1a22,0,top - hl/2,0));
+      const nd = Math.max(2, Math.round(5*gs));
+      for (let i=0;i<nd;i++){ const dmd = box(.018,.018,.036,0xe8e0cc,0,top - .04 - i*(hl - .06)/Math.max(1, nd - 1),0); dmd.rotation.z = Math.PI/4; g.add(dmd); }
+      g.add(box(.05,.03,.04,0x8a8f98,0,top - hl - .015,0));
+    }
+    if (w.rapierGuard) rapierGuard(g, top, hl);
+    else if (w.guard){ const tsuba = new THREE.Mesh(new THREE.CylinderGeometry(.13,.13,.02,22), new THREE.MeshLambertMaterial({color:0x2b2830})); tsuba.scale.z = .75; tsuba.position.y = .14; g.add(tsuba); } // 넓은 날에 맞춰 조금 큰 타원 코등이
     g.add(box(.14,.045,.042,0xd4a640,0,.172,0));                                 // 넓힌 하바키 (날 밑동을 감쌈)
     const r = buildGreatBlade(g, w);
     if (w.guardian){ const aura = []; for (const [sc, op] of [[1.6, .22], [2.6, .09]]){ const m = new THREE.Mesh(new THREE.BoxGeometry(.135*sc, r.bl + .1, .045*sc), new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:op, depthWrite:false, blending:THREE.AdditiveBlending})); m.position.y = r.base + r.bl/2; m.userData.op = op; g.add(m); aura.push(m); } g.userData.aura = aura; }
@@ -1373,11 +1414,27 @@ function buildKatana(g, eq = {}){ // 일본도: 손잡이가 원점, 칼날은 +
     return {muzzle:0, anchors:{blade:[0, r.base + r.bl*.6, 0], guard:[0,.14,0], grip:[0,(w.guard ? .13 : .152) - .3*gs*.6,0], soul:[0, tY*.9, 0], saya:[0, r.base + r.bl*.35, 0]}};
   }
   const hl = .3*gs, top = w.guard ? .13 : .152;                    // 가드가 없으면 손잡이를 칼날 쪽으로 붙임
-  g.add(box(.04,hl,.032,0x1c1a22,0,top - hl/2,0));
-  const nd = Math.max(2, Math.round(5*gs));
-  for (let i=0;i<nd;i++){ const dmd = box(.018,.018,.036,0xe8e0cc,0,top - .04 - i*(hl - .06)/Math.max(1, nd - 1),0); dmd.rotation.z = Math.PI/4; g.add(dmd); }
-  g.add(box(.05,.03,.04,0x8a8f98,0,top - hl - .015,0));
-  if (w.guard){ const tsuba = new THREE.Mesh(new THREE.CylinderGeometry(w.great ? .11 : .075, w.great ? .11 : .075, w.great ? .026 : .016,18), new THREE.MeshLambertMaterial({color:0x2b2830})); tsuba.position.y = .14; g.add(tsuba); }
+  if (w.rapierGrip) rapierGrip(g, top, hl, gs);
+  else {
+    g.add(box(.04,hl,.032,0x1c1a22,0,top - hl/2,0));
+    const nd = Math.max(2, Math.round(5*gs));
+    for (let i=0;i<nd;i++){ const dmd = box(.018,.018,.036,0xe8e0cc,0,top - .04 - i*(hl - .06)/Math.max(1, nd - 1),0); dmd.rotation.z = Math.PI/4; g.add(dmd); }
+    g.add(box(.05,.03,.04,0x8a8f98,0,top - hl - .015,0));
+  }
+  if (w.rapierGuard) rapierGuard(g, top, hl);
+  else if (w.guard){ const tsuba = new THREE.Mesh(new THREE.CylinderGeometry(w.great ? .11 : .075, w.great ? .11 : .075, w.great ? .026 : .016,18), new THREE.MeshLambertMaterial({color:0x2b2830})); tsuba.position.y = .14; g.add(tsuba); }
+  if (w.rapier){ // 레이피어 날: 곧고 가는 은색 날
+    const r = rapierBlade(g, w);
+    if (w.guardian){ // 지키는 자: 곧은 날을 감싸는 흰 기백
+      const aura = [];
+      for (const [sc, op] of [[1.9, .22], [3.2, .09]]){
+        const m = new THREE.Mesh(new THREE.BoxGeometry(.022*sc, r.by0 - .19 + .05, .02*sc), new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:op, depthWrite:false, blending:THREE.AdditiveBlending}));
+        m.position.y = (.19 + r.by0)/2; m.userData.op = op; g.add(m); aura.push(m);
+      }
+      g.userData.aura = aura;
+    }
+    return {muzzle:0, anchors:{blade:[0, .19 + (r.by0 - .19)*.6, 0], guard:[0,.14,0], grip:[0,top - hl*.6,0], soul:[0, r.by0*.85, 0], saya:[0, .19 + (r.by0 - .19)*.35, 0]}};
+  }
   g.add(box(.034,.04,.026,0xd4a640,0,.168,0));
   let bx0 = 0, by0 = .19, ang = 0;
   for (let i=0;i<7;i++){
@@ -1518,6 +1575,11 @@ function buildScabbard(){
   while (scab.children.length) scab.remove(scab.children[0]);
   const box = new THREE.Group(); box.rotation.y = Math.PI; scab.add(box); // 칼날(날 쪽)이 바깥을 향하게 뒤집어 넣음
   const bs = (W.bladeScale || 1), lac = SM(0x15121a, .2, .35), horn = SM(0xd8cfc0, 0, .5);
+  if (W.rapier){ // 레이피어: 곧고 가는 가죽 검집 (왼쪽 허리)
+    rapierSaya(box, bs, !!W.sheathPow);
+    scab.scale.setScalar(.8); scab.position.set(SCABP.x, SCABP.y, SCABP.z); scab.rotation.set(SCABP.rx, SCABP.ry, SCABP.rz);
+    return;
+  }
   let bx0 = 0, by0 = .175, ang = 0;
   for (let i=0;i<7;i++){ // 칼날보다 조금 두꺼운 검은 옻칠 칼집 (칼날 모양대로 휨)
     const L = .15*bs, seg = new THREE.Mesh(new THREE.BoxGeometry(W.great ? .175 : .058, L + .01, W.great ? .055 : .03), lac);
@@ -1565,7 +1627,7 @@ function startSheath(){ sheathT = 1e-4; sheathFrom = {x:SWC.x, y:SWC.y, z:SWC.z,
 function sheathAlignPose(){ // 칼끝(휘어진 칼날의 실제 끝점)이 칼집 입구에 오도록 칼 전체를 옮긴 자세
   const bs = W.bladeScale || 1;
   let bx = 0, by = (W.guard === false ? .172 : .168) + .022, ang = 0;
-  for (let i=0;i<7;i++){ const L = .15*bs; bx -= Math.sin(ang)*L; by += Math.cos(ang)*L; ang += W.great ? 0 : .035; }
+  for (let i=0;i<7;i++){ const L = .15*bs; bx -= Math.sin(ang)*L; by += Math.cos(ang)*L; ang += (W.great || W.rapier) ? 0 : .035; } // 대검·레이피어는 곧은 칼
   if (W.great){ bx = 0; by = .19 + 1.05*bs; } // 대검 날: 곧은 칼, 끝 위치
   const d = new THREE.Vector3(bx, .175 - by - .03, 0).multiplyScalar(.8).applyEuler(new THREE.Euler(SCABP.rx, SCABP.ry, SCABP.rz)); // 칼끝 → 입구 (조금 바깥)
   return {x:SCABP.x + d.x, y:SCABP.y + d.y, z:SCABP.z + d.z, rx:SCABP.rx, ry:SCABP.ry, rz:SCABP.rz};
@@ -1697,7 +1759,10 @@ function updateViewArms(){
     rp.lerp(kp, w); if (w > .5) rax = axisOf([0,1,0], _q1.clone().multiply(bgv.quaternion));
   }
   placeArm(armVR, rp, ARM_S.R, rax);
-  if (sword && guarding && W.great && !sheathParry){ // 대검을 꽂았을 때: 왼팔 팔뚝을 날 가운데에 가로로 걸쳐 받침
+  if (sword && W.rapier){ // 레이피어: 왼손은 뒷짐 (칼집에 있을 때와 뽑고 넣을 때만 칼집을 잡음)
+    if (!swordOut || drawT > 0 || sheathT > 0){ scab.updateMatrix(); const lp = _av.set(0, .3, 0).applyMatrix4(scab.matrix); placeArm(armVL, lp.clone(), ARM_S.L, axisOf([0,1,0], scab.quaternion)); }
+    else armVL.g.visible = false;
+  } else if (sword && guarding && W.great && !sheathParry){ // 대검을 꽂았을 때: 왼팔 팔뚝을 날 가운데에 가로로 걸쳐 받침
     const mid = _av.set(0, .19 + .5*1.05*(W.bladeScale || 1), 0).applyMatrix4(gunModel.matrix).applyMatrix4(gun.matrix).clone();
     const hand = mid.clone().add(new THREE.Vector3(.19, .03, .06)), elbow = mid.clone().add(new THREE.Vector3(-.34, -.02, .12)); // 팔뚝은 날 가운데에 걸치고, 손은 날 오른쪽 밖에서 주먹만 쥠
     placeArm(armVL, hand, elbow, new THREE.Vector3(0, 0, 1));
@@ -2731,14 +2796,15 @@ const slashes = [], slashGeo = new THREE.PlaneGeometry(1, .045);
 function weaponUI(){
   $('scopeBtn').classList.toggle('hide', !(isTouch && W.zoom));
   $('skillBtn').classList.toggle('hide', !(isTouch && curSkill())); $('skillBtn').textContent = SKILL_NAMES[curSkill()] || ''; updateSkillUI();
-  $('reload').textContent = W.melee ? '패링' : '장전';
+  $('reload').textContent = W.melee ? (W.rapier ? '가드' : '패링') : '장전';
 }
 function resetSword(){
   gunSkill = null; rifleBuffT = 0; shellCharges = 0; shellLoadT = 0; if (heli){ scene.remove(heli.g); heli = null; }
   skillG = 0; skillPh = null; waves.forEach(wv => scene.remove(wv.g)); waves.length = 0;
   sheathT = 0; swordOut = false; drawT = 0; pendingSwing = false; greatRel = null; sheathPlant = false; guarding = false; parryHeld = false; guardSlashQ = null; guardBlocked = 0;
   swingT = 0; swordHitT = 0; parryT = 0; parryCd = 0; exec = null; rageT = 0; hitStopT = 0;
-  parryBuf = 0; parrySeq = 0; parryHoldT = 0; parryHealed = false; parryHit = false; knockT = 0; sheathParry = false; swordIdleT = 0; // 패리 입력 예약·튕겨남 자세
+  parryBuf = 0; parrySeq = 0; parryHoldT = 0;
+  rapierClock = 0; rapierHeld = false; rapierHoldT = 0; rapierLastPress = -9; rapierSlashes = 0; thrust = null; thrustFrom = null; deflectOwn = false; rapierFlickT = 0; // 레이피어 parryHealed = false; parryHit = false; knockT = 0; sheathParry = false; swordIdleT = 0; // 패리 입력 예약·튕겨남 자세
   slashes.forEach(sl => camera.remove(sl.m)); slashes.length = 0;
 }
 function slashFx(angle, ox, oy, len, white){ // 화면에 남는 칼자국
@@ -3098,7 +3164,7 @@ function updateWaves(dt){
 }
 function swordAttack(){
   if (itemUse || greatRel) return;
-  if (fireCd > 0 || exec || skillPh || rollT > 0 || (parryT > 0 && !parryHit)) return;
+  if (fireCd > 0 || exec || skillPh || rollT > 0 || thrust || (parryT > 0 && !parryHit && !W.rapier)) return; // 레이피어: 흘리기 창은 베기와 함께 열림
   if (parryHit && parryT > 0) drawSword(true); // 패링 직후 반격은 바로 뽑아 벰
   parryT = 0; knockT = 0; // 패링에 성공했으면 바로 반격 가능
   if (drawT > 0) return;
@@ -3123,6 +3189,71 @@ function doSwordHit(trailAng, mul = 1){ // mul: 발도 공격 등 피해 배수
   }
   if (gt) startExec(gt);
   else if (any){ sfx.slashHit(); shakeT = Math.max(shakeT, W.great ? .09 : .05); if (W.great){ hitStopT = .04; sfx.bossSwing(.2); } $('cross').classList.add('hit'); setTimeout(()=>$('cross').classList.remove('hit'), 90); }
+}
+// ---------- 레이피어: 탭 = 베기 + 정밀 흘리기, 누르고 있으면 좌우 베기 → 연속 찌르기 ----------
+// 정밀 흘리기: 공격 버튼을 한 번 누르면 패링 유예만큼 흘리기 창이 열림 (판정은 패링과 같음).
+// 연타(직전 누름에서 0.35초 안)나 누르고 있기(0.2초 이상)로는 열리지 않고, 시도할 때마다 패링 쿨타임이 돎.
+const RAPIER_HOLD = .2, RAPIER_MASH = .35, THRUST_DUR = .6;
+let rapierClock = 0, rapierHeld = false, rapierHoldT = 0, rapierLastPress = -9, rapierSlashes = 0, thrust = null, deflectOwn = false, rapierFlickT = 0;
+function markParryProjectiles(){ // 누른 순간 패리 사거리 안에 있던 화살·반사탄만 받아낼 수 있음
+  parrySeq++; const pp = yawObj.position, pr = W.parryRange || 99;
+  for (const s of shots) if (!s.ret && !s.stuck && s.m.position.distanceTo(pp) <= pr) s.parryWin = parrySeq;
+  for (const b of rbullets) if (!b.ret && b.m.position.distanceTo(pp) <= pr) b.parryWin = parrySeq;
+}
+function openDeflect(){ // 정밀 흘리기 창
+  parryT = W.parryWin || PARRY_WIN; parryCd = W.parryCd || PARRY_CD; parryHealed = false; parryHit = false; deflectOwn = true;
+  markParryProjectiles();
+}
+function startThrust(){ // 팔을 L자로 몸에 붙였다가 연속 찌르기 (공격 속도가 빠를수록 더 많이)
+  thrust = {n: Armory.thrustCount(W, rateMul()), i: 0, t: 0}; fireCd = THRUST_DUR;
+  thrustFrom = {x:SWC.x, y:SWC.y, z:SWC.z, q:SWC.q.clone()};
+}
+let thrustFrom = null;
+function updateThrust(dt){
+  if (exec || itemUse || skillPh || rollT > 0){ thrust = null; return; } // 처형·회복템·스킬·구르기로 끊김
+  thrust.t += dt;
+  const per = THRUST_DUR/thrust.n;
+  while (thrust.i < thrust.n && thrust.t >= (thrust.i + .35)*per){ thrust.i++; doThrustHit(); sfx.swing(); }
+  if (thrust.t >= THRUST_DUR){ thrust = null; rapierSlashes = 0; }
+}
+function doThrustHit(){ // 찌르기: 좁은 앞쪽(약 25°)에서 가장 가까운 적 하나, 베기 사거리 +1m, 베기 피해의 60%
+  const p = yawObj.position, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+  let best = null, bd = 1e9;
+  for (const e of enemies){
+    if (!Combat.targetable(e, 'melee')) continue;
+    const dx = e.g.position.x - p.x, dz = e.g.position.z - p.z, h = Math.hypot(dx, dz) || .01;
+    if (h - e.r > W.range + 1) continue;
+    const ang = Math.acos(clamp((dx*fx + dz*fz)/h, -1, 1));
+    if (ang - Math.atan2(e.r, h) > .22 && h > e.r + .4) continue; // 앞쪽 약 ±12.5° (몸 너비 포함)
+    if (footY > 2.2*e.def.scale) continue;
+    if (h < bd){ bd = h; best = e; }
+  }
+  if (!best) return;
+  if (best.groggyT > 0){ thrust = null; startExec(best); return; } // 그로기면 처형으로
+  burst(best, 0xb0302a, 4);
+  if (hitEnemy(best, W.dmg*.6, 'thrust', p).shielded) sfx.clang();
+  addSkill(SKILL_GAIN.sword.hit*.4);
+  sfx.slashHit(); shakeT = Math.max(shakeT, .03); $('cross').classList.add('hit'); setTimeout(()=>$('cross').classList.remove('hit'), 70);
+}
+function rapierTick(dt){ // 레이피어 입력 (매 프레임)
+  rapierClock += dt;
+  if (rapierFlickT > 0) rapierFlickT -= dt;
+  if (firing && !rapierHeld){ // 누른 순간: 베기, 그리고 연타가 아니면 흘리기 창
+    rapierHeld = true; rapierHoldT = 0;
+    const mash = rapierClock - rapierLastPress < RAPIER_MASH; rapierLastPress = rapierClock;
+    if (!thrust){ const was = fireCd; swordAttack(); if (fireCd > was) rapierSlashes = 1; }
+    if (!mash && parryCd <= 0 && !itemUse && !exec && !skillPh && !(rollT > 0)) openDeflect();
+  } else if (!firing && rapierHeld){ rapierHeld = false; rapierSlashes = 0; }
+  if (rapierHeld){
+    rapierHoldT += dt;
+    if (deflectOwn && rapierHoldT >= RAPIER_HOLD){ parryT = 0; deflectOwn = false; } // 누르고 있으면 흘리기가 아님
+    if (rapierHoldT >= RAPIER_HOLD && !thrust && fireCd <= 0 && !exec && !skillPh && !itemUse && !(rollT > 0) && swordOut && !(drawT > 0)){
+      if (rapierSlashes < 2){ const was = fireCd; swordAttack(); if (fireCd > was) rapierSlashes++; } // 좌우 베기
+      else startThrust();                                                                             // 그다음 연속 찌르기
+    }
+  }
+  if (thrust) updateThrust(dt);
+  if (deflectOwn && !(parryT > 0)) deflectOwn = false;
 }
 // 패링 자세 변화: 누를 때마다 높이·기울기가 조금씩 다른 막기 자세 중 하나를 고름
 const PARRY_VARS = [
@@ -3155,7 +3286,7 @@ function parryRelease(){
 }
 function updateGuard(dt){
   if (heldXP > 0 && !guarding && !guardSlashQ){ const n = heldXP; heldXP = 0; gainXP(n); } // 반격까지 끝나면 모아 둔 경험치 지급
-  if (parryHeld && W.guardian && !guarding){ parryHoldT += dt; if (parryHoldT > .22){ guarding = true; guardBlocked = 0; if (W.great){ drawT = 0; sheathT = 0; sheathParry = false; sheathPlant = !swordOut; if (swordOut) drawSword(true); plantAnim = 0; plantFrom = {x:SWC.x, y:SWC.y, z:SWC.z, q:SWC.q.clone()}; } else if (swordOut && !(sheathT > 0)) drawSword(true); else { sheathT = 0; swordOut = false; sheathParry = true; } parryT = 0; sfx.guardOn(); } }
+  if (parryHeld && W.guardian && !guarding){ parryHoldT += dt; if (parryHoldT > .22){ guarding = true; guardBlocked = 0; if (W.great){ drawT = 0; sheathT = 0; sheathParry = false; sheathPlant = !swordOut; if (swordOut) drawSword(true); plantAnim = 0; plantFrom = {x:SWC.x, y:SWC.y, z:SWC.z, q:SWC.q.clone()}; } else if (W.rapier || (swordOut && !(sheathT > 0))) drawSword(true); else { sheathT = 0; swordOut = false; sheathParry = true; } parryT = 0; sfx.guardOn(); } }
   if (guarding && (!W.melee || !W.guardian || itemUse || exec || skillPh)){ guarding = false; parryHeld = false; }
   if (greatRel){ // 대검 반격 진행: 가로 0.75초(0.42초에 판정), 세로는 0.85초 뒤 0.8초(0.5초에 판정)
     const r = greatRel; r.t += dt;
@@ -3216,6 +3347,7 @@ function guardHit(kind){ // 가드로 막을 때 (근접은 패링 판정 연출
 }
 function parry(){
   if (!W.melee || state !== 'play' || paused || exec || skillPh || itemUse) return;
+  if (W.rapier) return;                                    // 레이피어: 패링 불가 (대신 공격 버튼으로 정밀 흘리기)
   if (W.great && swingT > 0) return;                       // 대검: 휘두르는 동안은 패링 불가
   if (parryCd > 0 && !(sheathT > 0)){ parryBuf = .45; return; } // 납도 동작 중에는 쿨타임과 상관없이 패링 가능
   parryBuf = 0;
@@ -3224,10 +3356,7 @@ function parry(){
   parryVar = {dx:v0.dx + j()*.3, dy:v0.dy + j()*.3, rx:v0.rx + j(), ry:v0.ry + j(), rz:v0.rz + j()};
   if (swordOut) drawSword(); else { sheathParry = true; swordIdleT = 0; } // 칼집에 넣은 상태면 칼집째로 들어 막음 (대검은 등에서 칼집째 앞으로 가져와 막음)
   parryT = W.parryWin || PARRY_WIN; parryCd = W.parryCd || PARRY_CD; parryHealed = false; parryHit = false; swingT = 0; sfx.parryStart(); updateHUD();
-  // 투사체는 누른 순간 패리 사거리 안에 있던 것만 받아낼 수 있음 (너무 일찍 누르면 실패)
-  parrySeq++; const pp = yawObj.position, pr = W.parryRange || 99;
-  for (const s of shots) if (!s.ret && !s.stuck && s.m.position.distanceTo(pp) <= pr) s.parryWin = parrySeq;
-  for (const b of rbullets) if (!b.ret && b.m.position.distanceTo(pp) <= pr) b.parryWin = parrySeq;
+  markParryProjectiles(); // 투사체는 누른 순간 패리 사거리 안에 있던 것만 받아낼 수 있음 (너무 일찍 누르면 실패)
 }
 function parrySparks(){ // 칼끼리 부딪힌 자리(화면 앞쪽)에서 빨강·노랑 불꽃이 튐
   const fwd = new THREE.Vector3(), cp = new THREE.Vector3();
@@ -3255,7 +3384,7 @@ function parrySuccess(e){
   } else if (e){ // 일반 병사는 바로 그로기
     e.groggyT = 2.5; e.aimT = 0; e.recoverT = 0; e.atkPh = 0; e.shoot = Math.max(e.shoot, 1.5);
   }
-  parryHit = true; parryCd = 0; knockT = KNOCK_DUR; knockSide = parryVar.dx < 0 ? -1 : parryVar.dx > 0 ? 1 : (Math.random() < .5 ? -1 : 1); sfx.parry(); parrySparks(); shakeT = Math.max(shakeT, .16); // 패링: 화면 살짝 흔들림 + 불꽃 // 패링 성공 시 쿨타임 즉시 초기화
+  parryHit = true; if (W.rapier){ rapierFlickT = .22; deflectOwn = false; } else { parryCd = 0; knockT = KNOCK_DUR; } // 레이피어: 쿨타임 유지, 날로 빗겨 쳐냄 knockSide = parryVar.dx < 0 ? -1 : parryVar.dx > 0 ? 1 : (Math.random() < .5 ? -1 : 1); sfx.parry(); parrySparks(); shakeT = Math.max(shakeT, .16); // 패링: 화면 살짝 흔들림 + 불꽃 // 패링 성공 시 쿨타임 즉시 초기화
   hitStopT = .1; slashFx(0, 0, .02, 1.6, true); // 패링 섬광은 흰색 유지
   if (up.calm && !parryHealed){ parryHealed = true; hp = Math.min(maxHp(), hp + 6*up.calm); updateHUD(); } // 평정심
   if (parryBuf > 0){ const pw = parryHit; parry(); parryHit = pw; } // 미리 눌러 둔 패링을 바로 이어서 (후딜 없음)
@@ -3435,7 +3564,8 @@ function animateSword(dt, dip){
   }
   if (W.great && sheathPlant && guarding){ /* 칼집째 꽂을 땐 아래에서 칼 자세를 그대로 따라감 */ }
   else if (W.great && !sheathParry && scabCur.z > .1){ for (const k of ['x','y','z']) scabCur[k] = GREAT_BACK[k]; scabCur.q.setFromEuler(new THREE.Euler(GREAT_BACK.rx, GREAT_BACK.ry, GREAT_BACK.rz)); } // 대검 칼집은 등에
-  const idle = W.great ? (swordOut ? Object.assign({}, GREAT_IDLE, {y:GREAT_IDLE.y - dip*.3}) : Object.assign({}, GREAT_BACK)) : swordOut ? {x:.34, y:-.44 - dip*.3, z:-.6, rx:-1.25, ry:-.1, rz:.2} : Object.assign({}, scabCur); // 뽑았으면 겨눈 자세, 아니면 칼집과 함께
+  const RAP_IDLE = poseDir(.26, -.3 - dip*.3, -.55, [-.105, .121, -.987], [1, 0, 0]); // 레이피어 겨눔: 칼끝을 화면 가운데(조준점)로
+  const idle = (W.rapier && swordOut) ? RAP_IDLE : W.great ? (swordOut ? Object.assign({}, GREAT_IDLE, {y:GREAT_IDLE.y - dip*.3}) : Object.assign({}, GREAT_BACK)) : swordOut ? {x:.34, y:-.44 - dip*.3, z:-.6, rx:-1.25, ry:-.1, rz:.2} : Object.assign({}, scabCur); // 뽑았으면 겨눈 자세, 아니면 칼집과 함께
   let T, snap = false;
   if (exec && exec.boss){
     const B2 = {x:.1, y:-.06, z:-.95, rx:-1.5, ry:.1, rz:.1}, B5 = {x:-.05, y:-.55, z:-.7, rx:-2.4, ry:0, rz:-.15};
@@ -3482,9 +3612,18 @@ function animateSword(dt, dip){
       T = keyPose([[0, plantFrom || PLANT_P], [.42, PLANT_RAISE], [.74, PLANT_P], [1, PLANT_P]], kw); snap = true;
       if (was < .72 && plantAnim >= .72) plantFx();
     } else { const kk = knockAmt(); T = {x:.05 + kk*.015, y:.14 - kk*.02, z:-.6, rx:Math.PI + .45 + kk*.06, ry:0, rz:.03}; }
+  } else if (guarding && W.rapier){ // 레이피어 + 지키는 자: 화면 가운데에 날을 세워 가드 (막을 때마다 살짝 튕김)
+    const kk = knockAmt(); T = poseDir(.02 + kk*.03, -.24 + kk*.03, -.5, [kk*.15, 1, -.08], [1, 0, 0]);
   } else if (guarding && !sheathParry){ // 발도 가드: 칼을 가로로 눕혀 들고, 왼손등으로 칼등을 받침 (막을 때마다 살짝 튕김)
     const kk = knockAmt(); T = {x:.12 + kk*.04, y:-.1 + kk*.04, z:-.46, rx:-.12 - kk*.15, ry:0, rz:1.5 + kk*.3 + Math.sin(performance.now()/90)*.008};
-  } else if (parryT > 0 || knockT > 0){
+  } else if (thrust){ // 레이피어 연속 찌르기: 팔을 L자로 몸에 붙였다가 곧게 뻗기를 반복
+    const L = poseDir(.2, -.24, -.42, [-.08, .1, -1], [1, 0, 0]), X = poseDir(.06, -.14, -.88, [-.03, .05, -1], [1, 0, 0]); // L: 팔꿈치를 옆구리에 붙이고 칼을 당김, X: 곧게 뻗음
+    const per = THRUST_DUR/thrust.n, k = Math.min(1, (thrust.t % per)/per);
+    T = thrust.t < per*.2 ? lerpPose(thrustFrom || L, L, thrust.t/(per*.2)) : keyPose([[0, L], [.35, X], [.55, X], [1, L]], k); snap = true;
+  } else if (rapierFlickT > 0){ // 정밀 흘리기: 날로 상대 공격을 바깥으로 살짝 빗겨 쳐냄
+    const k = 1 - rapierFlickT/.22;
+    T = keyPose([[0, RAP_IDLE], [.35, poseDir(-.04, -.16, -.6, [.4, .38, -.83], [1, 0, 0])], [1, RAP_IDLE]], k); snap = true;
+  } else if ((parryT > 0 || knockT > 0) && !W.rapier){
     snap = knockT > 0; T = withVar({x:.02, y:-.1, z:-.45, rx:-.25, ry:0, rz:1.45}); // 칼날을 가로로 세워 막는 자세 (매번 각도가 조금씩 다름)
   } else if (swingT > 0 && W.great){ // 대검 평타 (라인하르트 망치처럼): 한쪽 허리 뒤에 걸어 둔 칼을 가슴 높이로 크게 수평 호를 그리며 반대쪽 뒤까지 휘두르고, 그 자리에서 다음 베기를 준비
     const sd = swingDir, k = 1 - swingT/SWING_G;
@@ -3540,7 +3679,7 @@ function animateSword(dt, dip){
   if (au){ const tt = performance.now()/1000; au.forEach((m, i) => m.material.opacity = m.userData.op*(guarding ? 2.2 : 1)*(.75 + .25*Math.sin(tt*6 + i))); }
   gun.position.set(SWC.x, SWC.y, SWC.z); gun.quaternion.copy(SWC.q);
   if (W.great && sheathPlant && guarding){ scabCur.x = SWC.x; scabCur.y = SWC.y; scabCur.z = SWC.z; scabCur.q.copy(SWC.q); scab.position.set(SWC.x, SWC.y, SWC.z); scab.quaternion.copy(SWC.q); } // 칼집이 칼과 함께 움직임
-  updateTrail(dt, swingT > 0 || drawT > 0 || !!exec || !!greatRel || skillPh === 'draw');
+  updateTrail(dt, swingT > 0 || drawT > 0 || !!thrust || !!exec || !!greatRel || skillPh === 'draw');
 }
 // ---------- 웨폰 트레일: 칼날 밑동~끝이 지나간 자리를 띠로 남겨 서서히 사라지게 ----------
 const TRAIL_N = 16, trailHist = [];
@@ -4097,9 +4236,11 @@ function renderShopMain(){ // 상점 화면: 배경을 칠하고, 무대 영역�
 let shopSaya = null, shopInnerBase = null, shopSayaK = 0;
 let sayaGreatOverride = null;
 const GREAT_SAYA = () => sayaGreatOverride !== null ? sayaGreatOverride : !!W.great;
-function makeSayaGroup(bs, deco, great){
+function makeSayaGroup(bs, deco, great, rapier){
   sayaGreatOverride = !!great; // 상점용 칼집 모델 (칼과 같은 좌표계: +y가 칼끝 방향)
   const g = new THREE.Group(), lac = SM(0x15121a, .2, .35), horn = SM(0xd8cfc0, 0, .5);
+  if (rapier) rapierSaya(g, bs, deco);
+  else {
   let bx0 = 0, by0 = .175, ang = 0;
   for (let i=0;i<7;i++){
     const L = .15*bs, seg = new THREE.Mesh(new THREE.BoxGeometry(great ? .175 : .058, L + .01, great ? .055 : .03), lac);
@@ -4110,6 +4251,7 @@ function makeSayaGroup(bs, deco, great){
   const end = new THREE.Mesh(new THREE.BoxGeometry(.064,.05,.036), horn); end.position.set(bx0, by0, 0); end.rotation.z = ang; g.add(end);
   const cord = new THREE.Mesh(new THREE.BoxGeometry(.066,.05,.034), SM(0x6b1f2a, 0, .8)); cord.position.y = .26; g.add(cord);
   if (deco) for (const yy of [.38, .62]){ const band = new THREE.Mesh(new THREE.BoxGeometry(.064,.018,.036), SM(0xd4a640, 1, .3)); band.position.y = yy*bs + .1; g.add(band); }
+  }
   g.traverse(o => { if (o.material && GM.metal.envMap){ o.material.envMap = GM.metal.envMap; o.material.envMapIntensity = .6; } });
   sayaGreatOverride = null;
   return g;
@@ -4128,7 +4270,7 @@ function rebuildShopGun(){ // 가운데 큰 총: 지금 미리보기 중인 부�
   shopInner.position.sub(c);
   if (key === 'sword'){ // 칼 뒤에 칼집도 함께 보여 줌
     const w2 = makeWeapon('sword', shopEq);
-    shopSaya = makeSayaGroup(w2.bladeScale || 1, !!w2.sheathPow, !!w2.great); shopSaya.rotation.copy(shopInner.rotation); shopGun.add(shopSaya);
+    shopSaya = makeSayaGroup(w2.bladeScale || 1, !!w2.sheathPow, !!w2.great, !!w2.rapier); shopSaya.rotation.copy(shopInner.rotation); shopGun.add(shopSaya);
     shopInnerBase = shopInner.position.clone(); shopSaya.position.copy(shopInnerBase).add(new THREE.Vector3(0, -.09, 0)); shopSayaK = shopSlot === 'saya' ? 1 : 0;
   }
   shopScene.add(shopGun);
@@ -4179,9 +4321,9 @@ function statList(key, eq){ // [이름, 값, 표시 문자열, 낮을수록 좋�
     ['공격 속도', 1/w.rate, (1/w.rate).toFixed(1) + '회/초'],
     ['베기 사거리', w.range, w.range.toFixed(1) + 'm'],
     ['이동 속도', w.moveMul, Math.round(w.moveMul*100) + '%'],
-    ['패링 유예', w.parryWin, w.parryWin.toFixed(2) + '초'],
-    ['패링 쿨타임', w.parryCd, w.parryCd.toFixed(1) + '초', true],
-    ['패링 사거리', w.parryRange, w.parryRange.toFixed(1) + 'm'],
+    [w.rapier ? '흘리기 유예' : '패링 유예', w.parryWin, w.parryWin.toFixed(2) + '초'],
+    [w.rapier ? '흘리기 쿨타임' : '패링 쿨타임', w.parryCd, w.parryCd.toFixed(1) + '초', true],
+    [w.rapier ? '흘리기 사거리' : '패링 사거리', w.parryRange, w.parryRange.toFixed(1) + 'm'],
     ['패링 강도', w.parryPow, String(w.parryPow)],
     ['납도 패링 강도', w.parryPow + (w.sheathPow || 0), String(w.parryPow + Math.round(w.sheathPow || 0))],
     ['가드 피해 감소', w.guardian ? Math.min(.6, Math.max(.05, w.parryPow/100*.3)) : 0, w.guardian ? Math.round(Math.min(.6, Math.max(.05, w.parryPow/100*.3))*100) + '%' : '-']
@@ -4546,7 +4688,7 @@ function update(dt){
   if (bmgStack > 0) bmgStack = Math.max(0, bmgStack - dt/.9); // 0.9초마다 한 단계씩 회복
   { // 지금 패링할 수 없으면 패링 버튼을 회색으로
     const canParry = !itemUse && !exec && !skillPh && !(W.great && swingT > 0) && (parryCd <= 0 || sheathT > 0);
-    $('reload').classList.toggle('cool', W.melee && !canParry);
+    $('reload').classList.toggle('cool', W.melee && (W.rapier ? !W.guardian : !canParry)); // 레이피어: 지키는 자가 있을 때만 (가드)
   }
   if (swingT > 0) swingT -= dt;
   if (swordHitT > 0){ swordHitT -= dt; if (swordHitT <= 0) doSwordHit(); }
@@ -4566,7 +4708,7 @@ function update(dt){
   } else if (W.flame){
     if (firing) flameTick(dt);
     muzzleLight.intensity = firing ? 1.5 + Math.random() : 0;
-  } else if (W.melee){ if (firing) swordAttack(); }
+  } else if (W.melee){ if (W.rapier) rapierTick(dt); else if (firing) swordAttack(); }
   else if (firing) shoot();
   adsK += ((scoped ? 1 : 0) - adsK)*Math.min(1, dt*12*(W.aimSpeed || 1));
   const lensL = W.scopeType === 'optic' && gunModel && gunModel.userData.lens, adsZ = lensL ? (-.1 - lensL.z)*(1 - cantK) + ADS_Z*cantK : ADS_Z; // 배율 조준경: 접안렌즈가 눈앞 10cm에 (기울여 조준하면 레드도트 거리로)
@@ -4575,7 +4717,7 @@ function update(dt){
   gun.position.y = GUN_Y - dip*0.3;
   if (!W.melee && trailMesh.visible){ trailMesh.visible = false; trailHist.length = 0; } // 총으로 바꾸면 잔상 지움
   if (W.melee){
-    if (swordOut && !greatRel && !(sheathT > 0) && !(drawT > 0) && swingT <= 0 && !(parryT > 0) && !exec && !skillPh && !firing){ swordIdleT += dt; if (swordIdleT > .7) startSheath(); } // 공격을 멈추면 곧바로 칼집에 넣음
+    if (swordOut && !greatRel && !(sheathT > 0) && !(drawT > 0) && swingT <= 0 && !thrust && !(parryT > 0) && !exec && !skillPh && !firing){ swordIdleT += dt; if (swordIdleT > .7) startSheath(); } // 공격을 멈추면 곧바로 칼집에 넣음
     else if (firing) swordIdleT = 0;
     animateSword(dt, dip);
   }

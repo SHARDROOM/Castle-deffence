@@ -28,6 +28,7 @@ test('정책표가 리팩터 전 피해 식과 같은 값을 낸다', () => {
     ['검기: 보스 방패 정면', boss(), 25, 'wave', FRONT, 25 * M * .5],
     ['검기: 보스 등 뒤', boss(), 25, 'wave', BACK, 25 * M],
     ['검: 광폭화 보스 방패 정면', boss({ enraged: true }), 7, 'slash', FRONT, 7 * M * .3],
+    ['레이피어 찌르기: 보스 방패 정면', boss(), 1.8, 'thrust', FRONT, 1.8 * M * .5],
     ['화염: 보스 방패 정면은 절반', boss({ enraged: true }), 2, 'flame', FRONT, 2 * M * .5],
     ['헬기: 보스 방패 정면', boss(), 9, 'heli', FRONT, 9 * M * .5],
     ['처형: 보스 3배', boss(), 4, 'exec', FRONT, 4 * M * 3],
