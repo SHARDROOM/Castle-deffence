@@ -241,7 +241,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · be407a</div>
+<div id="buildVer" class="hud">v2026.11.05 · 5647af</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -1871,17 +1871,17 @@ function makeSoldier(type){
     const th = new THREE.Bone(); th.position.set(x, 0, 0); rig.add(th); hide(add(th, SG.thigh, pants, 0, -0.23, 0)); hide(add(th, SG.jHip, pants, 0, 0, 0));
     const kn = new THREE.Bone(); kn.position.y = -0.46; th.add(kn);
     hide(add(kn, SG.shin, pants, 0, -0.21, 0)); hide(add(kn, SG.jKnee, pants, 0, 0, 0)); add(kn, SG.foot, boots, 0, -0.40, 0.04);
-    limbs.push([th, kn, .46, .38, .04, KN ? [.23,.21,.18] : [.17,.16,.15], KN ? [.25,.22,.19] : [.19,.18,.17], pants]); // 허벅지~정강이를 한 덩어리로 (기사는 굵게)
+    limbs.push([th, kn, .46, .38, .04, KN ? [.21,.19,.17] : [.17,.16,.15], KN ? [.23,.2,.18] : [.19,.18,.17], pants]); // 허벅지~정강이를 한 덩어리로 (기사는 굵게)
     return [th, kn];
   };
   const arm = x => {
-    const up = new THREE.Bone(); up.position.set(x*(KN ? 1.68 : .94), KN ? 0.44 : 0.46, 0); chest.add(up); // 기사: 넓은 흉갑 바깥으로 팔을 벌림 hide(add(up, SG.upper, shirt, 0, -0.16, 0)); hide(add(up, SG.jShoulder, shirt, 0, 0, 0));
+    const up = new THREE.Bone(); up.position.set(x*(KN ? 1.5 : .94), KN ? 0.44 : 0.46, 0); chest.add(up); // 기사: 넓은 흉갑 바깥으로 팔을 벌림 hide(add(up, SG.upper, shirt, 0, -0.16, 0)); hide(add(up, SG.jShoulder, shirt, 0, 0, 0));
     const el = new THREE.Bone(); el.position.y = -ARM_L1; up.add(el);
     hide(add(el, SG.fore, shirt, 0, -0.15, 0)); hide(add(el, SG.jElbow, shirt, 0, 0, 0)); add(el, SG.hand, skin, 0, -ARM_L2, 0);
-    limbs.push([up, el, ARM_L1, ARM_L2 - .04, .05, KN ? [.21,.2,.18] : [.13,.125,.12], KN ? [.22,.21,.19] : [.14,.135,.13], shirt]); // 위팔~아래팔을 한 덩어리로 (기사는 굵게)
+    limbs.push([up, el, ARM_L1, ARM_L2 - .04, .05, KN ? [.18,.17,.16] : [.13,.125,.12], KN ? [.19,.18,.17] : [.14,.135,.13], shirt]); // 위팔~아래팔을 한 덩어리로 (기사는 굵게)
     return [up, el];
   };
-  const [thighL, kneeL] = leg(KN ? -0.16 : -0.13), [thighR, kneeR] = leg(KN ? 0.16 : 0.13);
+  const [thighL, kneeL] = leg(KN ? -0.145 : -0.13), [thighR, kneeR] = leg(KN ? 0.145 : 0.13);
   const [armL, foreL] = arm(-0.33), [armR, foreR] = arm(0.33);
   let bowG = null, str1 = null, str2 = null, nock = null, shieldFx = null, S_extra = {};
   if (type==='ranged'){
@@ -1961,36 +1961,36 @@ function makeSoldier(type){
   if (type==='knight'){ // 왕국의 마지막 기사: 상자만으로 겹치고 기울여 쌓은 황금 판금, 십자 눈구멍의 각진 투구, 퀴스, 대검 두 자루
     const gold = M(0xd4a640), goldD = M(0x9c7424), goldL = M(0xf0cf72), black = M(0x14100c), leather = M(0x3a2414), steelK = M(0xd7dce2);
     const P = (parent, w, h, d, mat, x, y, z, rx = 0, ry = 0, rz = 0, head) => { const m = add(parent, bx(w, h, d), mat, x, y, z, head); m.rotation.set(rx, ry, rz); return m; }; // 상자 하나 (기울임 포함)
-    // 투구: 약간 길쭉한 상자 + 네 모서리를 비스듬히 깎은 판(45° 상자) → 각진 원통, 윗면·목 테두리, 십자 눈구멍
-    P(neck, .42, .56, .42, gold, 0, .25, 0, 0, 0, 0, true);
-    for (const [cx, cz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) P(neck, .16, .56, .06, goldD, cx*.19, .25, cz*.19, 0, cx*cz > 0 ? -Math.PI/4 : Math.PI/4, 0, true);
-    P(neck, .46, .06, .46, goldD, 0, -.01, 0, 0, 0, 0, true);
-    P(neck, .36, .05, .36, goldD, 0, .555, 0, 0, 0, 0, true);
-    P(neck, .05, .3, .03, black, 0, .27, .21, 0, 0, 0, true); P(neck, .3, .05, .03, black, 0, .31, .21, 0, 0, 0, true); // 십자 눈구멍
-    P(neck, .035, .5, .03, goldL, .12, .25, .215, 0, 0, 0, true); P(neck, .035, .5, .03, goldL, -.12, .25, .215, 0, 0, 0, true);
-    P(neck, .5, .1, .44, goldD, 0, -.06, 0);                                                               // 목가리개
+    // 투구: 약간 길쭉한 9각기둥 (면이 정면을 보게 돌림, 면마다 각진 음영), 윗면·목 테두리, 십자 눈구멍
+    const HF = c => { const m = new THREE.MeshLambertMaterial({color:c, flatShading:true}); mats.push(m); return m; };
+    const prism = (r, h, mat, y) => { const m = add(neck, new THREE.CylinderGeometry(r, r, h, 9), mat, 0, y, 0, true); m.rotation.y = Math.PI/9; return m; };
+    prism(.23, .56, HF(0xd4a640), .25); prism(.245, .06, HF(0x9c7424), -.01); prism(.2, .05, HF(0x9c7424), .555);
+    const HZ = .23*Math.cos(Math.PI/9);                                                                   // 정면 면까지 거리
+    P(neck, .05, .3, .03, black, 0, .27, HZ, 0, 0, 0, true); P(neck, .26, .05, .03, black, 0, .31, HZ, 0, 0, 0, true); // 십자 눈구멍 (정면 면 위)
+    P(neck, .03, .5, .03, goldL, .07, .25, HZ - .005, 0, 0, 0, true); P(neck, .03, .5, .03, goldL, -.07, .25, HZ - .005, 0, 0, 0, true);
+    P(neck, .44, .1, .4, goldD, 0, -.06, 0);                                                               // 목가리개
     // 흉갑: 좌우 두 판을 V자로 기울여 가운데 능선을 세움, 윗가슴 판, 등판
-    for (const sx of [-1, 1]) P(chest, .38, .5, .14, gold, sx*.17, .32, .13, 0, -sx*.32, 0);
-    P(chest, .05, .48, .06, goldL, 0, .32, .22);                                                         // 능선
-    P(chest, .72, .14, .42, gold, 0, .55, 0); P(chest, .74, .04, .44, goldD, 0, .48, 0);                 // 윗가슴·목 둘레
-    P(chest, .68, .52, .16, gold, 0, .32, -.13);                                                         // 등판
-    P(chest, .7, .5, .32, gold, 0, .3, 0);                                                               // 옆구리를 채우는 몸통
-    for (let i = 0; i < 3; i++) P(chest, .66 - i*.03, .09, .4 - i*.01, i % 2 ? goldD : gold, 0, .04 - i*.08, .02, .12, 0, 0); // 배 겹판 (앞으로 살짝 기울여 겹침)
+    for (const sx of [-1, 1]) P(chest, .32, .5, .14, gold, sx*.14, .32, .14, 0, sx*.3, 0);             // 두 판이 가운데에서 만나며 앞으로 튀어나옴
+    P(chest, .07, .48, .08, goldL, 0, .32, .23);                                                         // 가운데 능선 (가장 앞)
+    P(chest, .6, .14, .38, gold, 0, .55, 0); P(chest, .62, .04, .4, goldD, 0, .48, 0);                   // 윗가슴·목 둘레
+    P(chest, .58, .52, .16, gold, 0, .32, -.12);                                                         // 등판
+    P(chest, .6, .5, .3, gold, 0, .3, 0);                                                                // 옆구리를 채우는 몸통
+    for (let i = 0; i < 3; i++) P(chest, .56 - i*.03, .09, .36 - i*.01, i % 2 ? goldD : gold, 0, .04 - i*.08, .02, .12, 0, 0); // 배 겹판 (앞으로 살짝 기울여 겹침)
     // 어깨갑옷: 윗판 + 아래로 계단처럼 내려가며 바깥으로 기울어지는 겹판 세 장
     for (const sx of [-1, 1]){
-      const sh = new THREE.Group(); sh.position.set(sx*.55, .52, 0); chest.add(sh);
-      P(sh, .4, .14, .46, gold, 0, .02, 0, 0, 0, -sx*.28);
-      P(sh, .42, .1, .48, goldD, sx*.06, -.08, 0, 0, 0, -sx*.42);
-      P(sh, .42, .1, .48, gold, sx*.1, -.16, 0, 0, 0, -sx*.55);
-      P(sh, .4, .1, .46, goldD, sx*.13, -.24, 0, 0, 0, -sx*.68);
-      P(sh, .06, .08, .44, goldL, -sx*.02, .11, 0, 0, 0, -sx*.28);                                      // 윗판 능선
+      const sh = new THREE.Group(); sh.position.set(sx*.47, .52, 0); chest.add(sh);
+      P(sh, .32, .13, .42, gold, 0, .02, 0, 0, 0, -sx*.3);
+      P(sh, .34, .09, .44, goldD, sx*.04, -.07, 0, 0, 0, -sx*.45);
+      P(sh, .34, .09, .44, gold, sx*.07, -.15, 0, 0, 0, -sx*.6);
+      P(sh, .32, .09, .42, goldD, sx*.09, -.22, 0, 0, 0, -sx*.75);
+      P(sh, .05, .07, .4, goldL, -sx*.02, .1, 0, 0, 0, -sx*.3);                                      // 윗판 능선
     }
     // 허리 아래: 태싯 (허리띠 + 앞·옆으로 벌어진 판)
-    P(rig, .64, .12, .4, gold, 0, .04, 0); P(rig, .66, .04, .42, goldD, 0, -.03, 0);
-    for (const sx of [-1, 1]){ P(rig, .26, .26, .08, gold, sx*.17, -.17, .17, -.25, 0, sx*.12); P(rig, .08, .26, .3, gold, sx*.35, -.15, 0, 0, 0, sx*.25); }
+    P(rig, .56, .12, .36, gold, 0, .04, 0); P(rig, .58, .04, .38, goldD, 0, -.03, 0);
+    for (const sx of [-1, 1]){ P(rig, .23, .26, .08, gold, sx*.15, -.17, .16, -.25, 0, sx*.12); P(rig, .08, .26, .28, gold, sx*.3, -.15, 0, 0, 0, sx*.22); }
     // 다리: 퀴스(앞판 + 바깥 판 + 윗단), 다이아몬드 무릎과 날개, 정강이(앞판 + 옆판), 발등
     for (const [th, kn, sx] of [[thighL, kneeL, -1], [thighR, kneeR, 1]]){
-      P(th, .25, .38, .1, gold, 0, -.21, .1, .05, 0, 0); P(th, .08, .38, .24, gold, sx*.12, -.21, 0, 0, 0, 0);
+      P(th, .23, .38, .1, gold, 0, -.21, .1, .05, 0, 0); P(th, .07, .38, .22, gold, sx*.11, -.21, 0, 0, 0, 0);
       P(th, .27, .07, .27, goldD, 0, -.04, .02);
       P(kn, .15, .15, .08, goldL, 0, 0, .11, 0, 0, Math.PI/4); P(kn, .26, .06, .1, goldD, 0, 0, .09);
       P(kn, .21, .34, .09, gold, 0, -.21, .09); P(kn, .07, .34, .2, gold, sx*.1, -.21, 0); P(kn, .07, .34, .2, gold, -sx*.1, -.21, 0);
@@ -1998,9 +1998,9 @@ function makeSoldier(type){
     }
     // 팔: 위팔 판, 다이아몬드 팔꿈치, 아래팔 판, 넓은 건틀릿 손목
     for (const [up, el] of [[armL, foreL], [armR, foreR]]){
-      P(up, .25, .3, .25, gold, 0, -.17, 0); P(up, .27, .05, .27, goldD, 0, -.04, 0);
+      P(up, .22, .3, .22, gold, 0, -.17, 0); P(up, .24, .05, .24, goldD, 0, -.04, 0);
       P(el, .15, .15, .1, goldL, 0, 0, -.1, 0, 0, Math.PI/4);
-      P(el, .23, .26, .23, gold, 0, -.15, 0); P(el, .26, .1, .26, goldD, 0, -.3, 0);
+      P(el, .2, .26, .2, gold, 0, -.15, 0); P(el, .23, .1, .23, goldD, 0, -.3, 0);
     }
     // 오른손 대검 (허리 칼집에서 뽑아 든 것, 총알 판정 없음)
     const swd = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); foreR.add(o); return o; };
@@ -2010,7 +2010,7 @@ function makeSoldier(type){
     swd(bx(.05, 1.5, .17), steelK, 0, -1.4, 0); swd(bx(.02, 1.46, .04), M(0xf4f7fa), 0, -1.4, -.09);
     swd(bx(.05, .18, .12), steelK, 0, -2.2, 0).rotation.x = -.5;
     // 허리 칼집 (왼쪽 허리, 비어 있음)
-    const hip = new THREE.Group(); hip.position.set(-.4, -.02, -.06); hip.rotation.set(.32, 0, -.1); hip.scale.set(1, .6, 1); rig.add(hip); // 다리 옆으로 조금 뒤로 기울여, 끝이 무릎 아래쯤에서 끝나게
+    const hip = new THREE.Group(); hip.position.set(-.34, -.02, -.06); hip.rotation.set(.32, 0, -.1); hip.scale.set(1, .6, 1); rig.add(hip); // 다리 옆으로 조금 뒤로 기울여, 끝이 무릎 아래쯤에서 끝나게
     const hipAdd = (geo, m, y) => { const o = new THREE.Mesh(geo, m); o.position.y = y; hip.add(o); return o; };
     hipAdd(bx(.09, 1.45, .2), leather, -.72); hipAdd(bx(.11, .12, .22), gold, -.02); hipAdd(bx(.11, .14, .22), gold, -1.42); hipAdd(bx(.1, .3, .21), goldD, -.6);
     // 등에 멘 대검: 칼집째 비스듬히, 손잡이가 오른쪽 어깨 위로
