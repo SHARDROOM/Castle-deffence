@@ -236,7 +236,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · dbc2af</div>
+<div id="buildVer" class="hud">v2026.11.05 · 060db9</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -2353,7 +2353,7 @@ function addTracer(from, to){
   const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([from,to]), new THREE.LineBasicMaterial({color:0xffe08a, transparent:true}));
   scene.add(line); tracers.push({line, life:TRACER});
 }
-let gunKick = 0, cantK = 0, cantHold = 0, manualCant = false; // cantK: 총을 45° 기울인 정도 (사이드 조준기) // 총 모델이 들리는 각도
+let gunKick = 0, gunKickL = 0, cantK = 0, cantHold = 0, manualCant = false; // cantK: 총을 45° 기울인 정도 (사이드 조준기) // 총 모델이 들리는 각도
 const recoilQ = {p:0, y:0}; let recoilBack = 0; // 아직 적용 안 된 반동, 천천히 되돌아올 양
 function updateRecoil(dt){
   if (recoilQ.p > 1e-5 || Math.abs(recoilQ.y) > 1e-5){ // ① 위로 확 (약 0.05초)
@@ -2447,7 +2447,8 @@ function shoot(){
   let rm = 1; // .50 BMG: 연달아 쏠수록 반동이 점점 커짐 (쉬면 서서히 회복)
   if (!W.special && gear[activeKey] && gear[activeKey].eq.ammo === 'bmg50'){ rm = 1 + .4*bmgStack; bmgStack = Math.min(5, bmgStack + 1); }
   recoilQ.p += W.recoil*rm;
-  gunKick = Math.min(.6, gunKick + W.recoil*rm*5.5); // 반동이 클수록 총구가 크게 들림                                                // 반동은 바로 꽂지 않고 몇 프레임에 걸쳐 확 올라감
+  if (W.dual && !W.special && dualLeft) gunKickL = Math.min(.6, gunKickL + W.recoil*rm*5.5); // 쌍권총: 이번에 쏜 왼쪽 권총만 들림
+  else gunKick = Math.min(.6, gunKick + W.recoil*rm*5.5); // 반동이 클수록 총구가 크게 들림                                                // 반동은 바로 꽂지 않고 몇 프레임에 걸쳐 확 올라감
   recoilQ.y += (Math.random() - .5)*1.2*W.recoil*rm*(W.recoilHMul || 1); // 좌우 반동
   if (ammo===0){ if (W.special) revertWeapon(); else startReload(); }
   updateHUD();
@@ -3104,12 +3105,12 @@ function animateGunSkill(dip){ // 스킬 중 총 모양 움직임
     gun.rotation.x = -.6*Math.sin(Math.min(1, (.6 - shellLoadT)/.6)*Math.PI);
   } else if (!W.melee){ gun.position.x = GUN_X; gun.rotation.y = 0; gun.rotation.z = 0; }
   const lgN = gunModel && gunModel.userData.leftGun;
-  gunKick *= Math.exp(-(1/60)*11); // 총 들림은 시점보다 빨리 돌아옴
+  gunKick *= Math.exp(-(1/60)*11); gunKickL *= Math.exp(-(1/60)*11); // 총 들림은 시점보다 빨리 돌아옴
   if (gunModel && !W.melee && !lgN){ const ak = 1 - adsK*.6; gunModel.rotation.x = gunKick*ak; gunModel.position.y = gunKick*.06*ak; gunModel.position.z = gunKick*.08*(1 - adsK); } // 조준 중엔 덜 들리고 뒤로 안 밀림
   if (lgN && !(reloading > 0)){ // 쌍권총: 오른쪽은 총 전체(gun)에, 왼쪽은 왼쪽 권총에만 반동 (오른쪽 반동은 왼쪽에서 빼서 따로 움직이게)
     const dt2 = 1/60; dualKickR *= Math.exp(-dt2*14); dualKickL *= Math.exp(-dt2*14);
     gunModel.position.z = dualKickR; gunModel.rotation.x = dualKickR*1.6 + gunKick; // 누적되지 않게 매 프레임 값으로 지정
-    lgN.position.set(-DUAL_DX, 0, dualKickL - dualKickR); lgN.rotation.set(dualKickL*1.6 - dualKickR*1.6, 0, 0);
+    lgN.position.set(-DUAL_DX, 0, dualKickL - dualKickR); lgN.rotation.set(dualKickL*1.6 + gunKickL - (dualKickR*1.6 + gunKick), 0, 0); // 왼쪽은 제 반동·들림만 (오른쪽 것은 빼서)
   }
 }
 function addSkill(n){
@@ -4921,7 +4922,7 @@ function resetWorld(){ // 적·화살·보급품을 치우고, 보스가 부순 
 function resetGun(){ // 무기와 총 자세 (장비를 먼저 초기화해야 무기 성능이 맞음)
   activeKey = weaponKey; W = makeWeapon(weaponKey); buildGun(); spin = 0;
   boltT = boltDur = boltEv = 0; pumpT = pumpDur = pumpEv = 0; bmgStack = 0; // 볼트·펌프 장전 동작, .50 BMG 누적 반동
-  gunKick = 0; cantK = 0; cantHold = 0; manualCant = false; adsK = 0; dualKickR = dualKickL = 0;
+  gunKick = 0; gunKickL = 0; cantK = 0; cantHold = 0; manualCant = false; adsK = 0; dualKickR = dualKickL = 0;
   kneelDip = 0; reloadDip = 0; dualFx = null; dualEv = 0; setMagsVisible(true);
   scoped = true; setScope(false); scoped = false;
   $('scope').style.opacity = 0; $('cross').style.opacity = 1; gun.visible = true;
