@@ -190,3 +190,8 @@ test('breakPow가 있어도 구르기·가드는 그대로', () => {
   assert.equal(Defense.resolve(atk('bossMelee', { breakPow: 999 }), def(Object.assign({ parryPow: 0 }, ROLL, PARRY))).outcome, 'dodged');
   assert.equal(Defense.resolve(atk('bossMelee', { breakPow: 999 }), def(Object.assign({ parryPow: 0 }, GUARD))).outcome, 'guarded');
 });
+
+test('패리가 깨질 때 받는 피해는 breakDmgMul 배 (없으면 그대로)', () => {
+  const r = Defense.resolve(atk('bossMelee', { breakPow: 130, breakDmgMul: .05 }), def(Object.assign({ parryPow: 100 }, PARRY)));
+  assert.equal(r.outcome, 'parryBroken'); close(r.damage, .5);
+});
