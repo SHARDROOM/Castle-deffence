@@ -181,3 +181,23 @@ test('대상 프로필: 리팩터 전 조건 그대로', () => {
   }
   assert.throws(() => Combat.targetable(plain, 'nope'), /Unknown target profile/);
 });
+
+// ---------- 처형 중에는 죽지 않음 ----------
+test('처형 중인 적은 마지막 일격 전에는 hp 1 아래로 내려가지 않는다', () => {
+  const e = enemy({ hp: 5 });
+  const r = hit1(e, 10, 'exec', null, { execTarget: e });
+  assert.equal(e.hp, 1); assert.equal(r.killed, false); assert.equal(r.kill, null);
+  hit1(e, 10, 'bullet', null, { execTarget: e }); // 다른 공격도 마찬가지
+  assert.equal(e.hp, 1);
+});
+
+test('처형의 마지막 일격은 처치할 수 있다', () => {
+  const e = enemy({ hp: 1 });
+  const r = Combat.hit(e, { base: 10, kind: 'exec', finisher: true }, ctxFor([e], { execTarget: e }));
+  assert.equal(r.killed, true); assert.ok(r.kill);
+});
+
+test('처형 대상이 아닌 적은 평소처럼 죽는다', () => {
+  const e = enemy({ hp: 1 }), other = enemy();
+  assert.equal(hit1(e, 10, 'execSplash', null, { execTarget: other }).killed, true);
+});
