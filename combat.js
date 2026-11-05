@@ -106,16 +106,19 @@
   }
 
   // 적 하나에게 공격 하나를 적용한다. 적의 hp·flash만 바꾸고, 나머지는 결과로 돌려준다.
-  //   attack: {base, kind, from?: {x, z}}
+  //   attack: {base, kind, from?: {x, z}, finisher?}
   //   ctx:    {enemies, dmgMul, wave, weaponKey, special, crave, craveMul, playing,
-  //            killSkill, bloodRage, pickupCount, cellFree(x, z), rng()}
+  //            killSkill, bloodRage, pickupCount, cellFree(x, z), rng(), execTarget?}
+  //   처형 중인 적(ctx.execTarget)은 처형의 마지막 일격(attack.finisher)이 아니면 hp 1 아래로 내려가지 않는다.
   //   반환:   {applied, dealt, shielded, heal, killed, kill}
   //           kill은 처치 보상. 추락 중인 비행선처럼 보상이 없으면 null.
   function hit(e, attack, ctx) {
     const res = { applied: false, dealt: 0, shielded: false, heal: 0, killed: false, kill: null };
     if (!ctx.enemies.includes(e)) return res;
     const p = policyOf(attack.kind);
-    const { dealt, shielded } = damageOf(e, attack, ctx);
+    const { dealt: raw, shielded } = damageOf(e, attack, ctx);
+    const spared = ctx.execTarget === e && !attack.finisher;
+    const dealt = spared ? Math.min(raw, Math.max(0, e.hp - 1)) : raw;
     res.applied = true; res.dealt = dealt; res.shielded = shielded;
     e.hp -= dealt; if (p.flash) e.flash = .09;
     const crave = ctx.crave && p.flash && ctx.playing; // 끝없는 갈망: 맞힐 때·처치할 때 체력 회복
