@@ -241,7 +241,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · a1a3c3</div>
+<div id="buildVer" class="hud">v2026.11.05 · 561d26</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -2839,11 +2839,11 @@ const BOSS_FX = {
   },
 };
 // ---------- 왕국의 마지막 기사: 등장 → 허리 칼집에서 대검을 뽑아 높이 들었다가 → 두 손 가드 ----------
-const KN_DRAW = {grip:.7, out:1.25, high:1.75, guard:2.35}; // 손이 칼자루를 잡음 · 칼이 다 빠짐 · 높이 든 채 멈춤 · 가드 자세 완성
+const KN_DRAW = {grip:.7, pull:1.35, high:1.85, guard:2.45, blade:1.6}; // 손이 칼자루를 잡음 · 오른쪽 위로 끝까지 뽑아 올림 · 높이 든 채 멈춤 · 가드 자세 완성 · 칼날 길이(칼 좌표)
 const KN_POSE = { // 각 뼈의 회전 [x, y, z] (오른팔 x가 음수면 앞으로 듦, z가 양수면 바깥으로)
   stand:  {armR:[.05, 0, .12],  foreR:[-.15, 0, 0], armL:[.05, 0, -.12], foreL:[-.15, 0, 0], chest:[0, 0, 0],    neck:[0, 0, 0]},
   reach:  {armR:[-.35, 0, -.7], foreR:[-1.15, 0, 0], armL:[.1, 0, -.25], foreL:[-.3, 0, 0], chest:[.08, .4, 0], neck:[.3, .2, 0]},  // 오른손을 왼쪽 허리 칼자루로
-  out:    {armR:[-1.6, 0, .55], foreR:[-.35, 0, 0], armL:[.15, 0, -.3], foreL:[-.3, 0, 0],  chest:[-.05, -.25, 0], neck:[0, 0, 0]}, // 비스듬히 뽑아 올림
+  pulled: {armR:[-2.85, 0, .8], foreR:[-.05, 0, 0], armL:[.15, 0, -.3], foreL:[-.3, 0, 0], chest:[-.1, -.32, .06], neck:[-.15, -.1, 0]}, // 칼자루를 오른쪽 위로 끝까지 뽑아 올림 (몸을 가로지르는 발도)
   high:   {armR:[-2.75, 0, .2], foreR:[-.25, 0, 0], armL:[-.2, 0, -.35], foreL:[-.4, 0, 0], chest:[-.1, -.05, 0], neck:[-.1, 0, 0]}, // 칼을 높이 세워 듦
   guard:  {armR:[-1.05, 0, .05], foreR:[-1.0, 0, 0], armL:[-1.0, 0, -.5], foreL:[-1.15, 0, 0], chest:[.05, -.15, 0], neck:[0, .1, 0]}, // 두 손으로 칼을 앞으로 겨눔
 };
@@ -2863,19 +2863,29 @@ function updateKnight(e, dt, p){
   const f = Math.min(1, dt*14);
   if (e.state === 'intro'){
     if (t < D.grip) knightPose(e, P.stand, P.reach, smooth(Math.min(1, t/D.grip)), f);
-    else if (t < D.out) knightPose(e, P.reach, P.out, smooth((t - D.grip)/(D.out - D.grip)), f);
-    else if (t < D.high) knightPose(e, P.out, P.high, smooth(Math.min(1, (t - D.out)/.3)), f);
+    else if (t < D.pull) knightPose(e, P.reach, P.pulled, smooth((t - D.grip)/(D.pull - D.grip)), f); // 칼자루를 오른쪽 위로 뽑아 올림
+    else if (t < D.high) knightPose(e, P.pulled, P.high, smooth((t - D.pull)/(D.high - D.pull)), f);
     else knightPose(e, P.high, P.guard, smooth(Math.min(1, (t - D.high)/(D.guard - D.high))), f);
-    if (!e.gripped && t >= D.grip){ // 칼자루를 잡음: 칼을 칼집에서 손으로 옮기고 (보이는 자리는 그대로) 손에 맞게 서서히 쥠
-      e.gripped = true; e.foreR.attach(e.kSword); e.swFrom = {p:e.kSword.position.clone(), q:e.kSword.quaternion.clone()};
-      sfx.unsheath();
+    if (!e.gripped && t >= D.grip){ e.gripped = true; e.foreR.add(e.kSword); sfx.unsheath(); } // 칼자루를 잡음: 이제 칼은 손에
+    if (e.gripped && !e.cleared){
+      // ① 칼은 손에 쥔 채, 칼날이 늘 칼집 입구를 지나가게 기울임 → 손이 멀어지는 만큼만 칼날이 칼집 밖으로 나옴 (칼집 안쪽은 안 보임)
+      e.g.updateMatrixWorld(true);
+      const mouth = e.kSheath.localToWorld(new THREE.Vector3(0, .02, 0)), ml = e.foreR.worldToLocal(mouth.clone());
+      const G = new THREE.Vector3(0, -.42, 0), dir = ml.clone().sub(G), dist = dir.length(); dir.normalize();  // 쥔 곳 → 칼집 입구
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
+      e.kSword.quaternion.copy(q); e.kSword.position.copy(G).sub(new THREE.Vector3(0, -.42, 0).applyQuaternion(q)); // 쥔 곳은 손에 그대로
+      const shown = dist - .18;                                                                                         // 칼날 밑동(가드)부터 입구까지
+      e.kBlade.scale.y = clamp(shown/D.blade, .05, 1);
+      if (shown >= D.blade || t >= D.pull){ // ② 칼끝이 입구를 빠져나옴 → 손에 맞게 바로 쥐어 감
+        e.cleared = true; e.swFrom = {p:e.kSword.position.clone(), q:e.kSword.quaternion.clone(), t, s:e.kBlade.scale.y}; // 칼끝 몇 cm는 입구에서 멀어지는 동안 마저 나옴
+        sfx.iai(); shakeT = Math.max(shakeT, .15);
+      }
     }
-    if (e.gripped && t < D.guard){
-      const k = smooth(Math.min(1, (t - D.grip)/(D.out - D.grip)));
+    if (e.cleared && t < D.guard){
+      const k = smooth(Math.min(1, (t - e.swFrom.t)/.3));
       e.kSword.position.lerpVectors(e.swFrom.p, new THREE.Vector3(), k); e.kSword.quaternion.copy(e.swFrom.q).slerp(new THREE.Quaternion(), k);
-      e.kBlade.scale.y = lerp(.45, 1, smooth(Math.min(1, (t - D.grip)/((D.out - D.grip)*.8)))); // 칼날이 칼집에서 빠져나옴
+      e.kBlade.scale.y = lerp(e.swFrom.s, 1, k);
     }
-    if (!e.drawSnd && t >= D.out - .15){ e.drawSnd = true; sfx.iai(); shakeT = Math.max(shakeT, .15); } // 칼이 다 빠지는 소리
     if (t >= D.guard){ e.state = 'guard'; e.st = 0; e.kBlade.scale.y = 1; e.kSword.position.set(0, 0, 0); e.kSword.quaternion.identity(); }
   } else { // 가드 자세로 버팀 (공격 패턴은 다음 단계에서)
     knightPose(e, P.guard, P.guard, 0, f);
