@@ -236,7 +236,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 4146a9</div>
+<div id="buildVer" class="hud">v2026.11.05 · f759c4</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3434,7 +3434,7 @@ function startExec(e){
   } else if (W.rapier) exec.rapier = true; // 레이피어: 머리 → 가슴 찌르고 다리 베기
 }
 // ---------- 보스 처형: 무릎을 밟고 뛰어올라 투구 틈에 꽂고, 비틀고, 내려오며 벰 (약 2.2초) ----------
-// ---------- 레이피어 보스 처형: 몸통 앞으로 뛰어올라, 양 어깨 → (숨 고르기) → 목 아래·몸통 아래를 찌르고,
+// ---------- 레이피어 보스 처형: 땅에 선 채로 거인의 몸통을 올려다보며, 양 어깨 → (숨 고르기) → 목 아래·몸통 아래를 찌르고,
 //            두 어깨를 잇는 가로 베기, 목 아래와 몸통 아래를 잇는 세로 베기로 십자를 새김 (약 2.6초) ----------
 // 찌를 곳은 거인의 실제 뼈 위치(양 어깨, 목, 엉덩이)에서 매 프레임 구함. 시간은 각 동작이 맞는 순간.
 const RB = {ls:.7, rs:.82, neck:1.3, low:1.42, hSlash:1.64, vSlash:1.92, land:2.3, end:2.6};
@@ -3443,7 +3443,7 @@ function rbTargets(e){ // 몸통 위 네 곳: 세계 좌표(w)와 화면 기준 
   const W_ = k => e[k].getWorldPosition(new THREE.Vector3());
   const sL = W_('armL'), sR = W_('armR'), nk = W_('neck'), hip = W_('thighL').add(W_('thighR')).multiplyScalar(.5);
   const mid = sL.clone().add(sR).multiplyScalar(.5).add(hip).multiplyScalar(.5);
-  const w = {a: sL.lerp(nk, .2), b: sR.lerp(nk, .2), neck: nk.clone().lerp(mid, .25), low: hip.clone().lerp(nk, .15)};
+  const w = {a: sL.lerp(nk, -.1), b: sR.lerp(nk, -.1), neck: nk.clone().lerp(mid, .05), low: hip.clone().lerp(nk, -.05)}; // 몸통 가장자리 쪽으로 넓게
   camera.updateMatrixWorld();
   const scr = v => { const c = v.clone().applyMatrix4(camera.matrixWorldInverse); return {x: c.x/Math.max(.1, -c.z), y: c.y/Math.max(.1, -c.z)}; };
   const A = scr(w.a), B = scr(w.b), left = A.x <= B.x; // 화면 왼쪽 어깨부터
@@ -3452,13 +3452,11 @@ function rbTargets(e){ // 몸통 위 네 곳: 세계 좌표(w)와 화면 기준 
 }
 function updateRapierBossExec(dt){
   const x = exec, e = x.e, p = yawObj.position, alive = enemies.includes(e);
-  x.t += dt; const t = x.t, S = e.def.scale, torsoY = 1.13*S, bx = e.g.position.x, bz = e.g.position.z, hang = torsoY - 1.6;
-  let dist;
-  if (t < .35){ dist = lerp(x.d0, 3.2, ease(t/.35)); x.y = 0; }                                                // 달려듦
-  else if (t < .6){ const k = (t - .35)/.25; dist = lerp(3.2, 2.6, k); x.y = lerp(0, hang, ease(k)) + Math.sin(k*Math.PI)*.3; } // 몸통 높이로 뛰어오름
-  else if (t < 2.02){ dist = 2.6; x.y = hang; }                                                                  // 몸통 앞에 떠서 찌르고 벰
-  else if (t < RB.land){ const k = (t - 2.02)/(RB.land - 2.02); dist = lerp(2.6, 3.3, k); x.y = lerp(hang, 0, k*k); } // 뒤로 물러나며 내려옴
-  else { dist = 3.3; x.y = 0; }
+  x.t += dt; const t = x.t, S = e.def.scale, torsoY = 1.13*S, bx = e.g.position.x, bz = e.g.position.z;
+  let dist; x.y = 0; // 도약 없이 땅에서
+  if (t < .45) dist = lerp(x.d0, 3.1, ease(t/.45));                                             // 달려듦
+  else if (t < 2.02) dist = 3.1;                                                               // 그 자리에서 찌르고 벰
+  else dist = lerp(3.1, 3.5, ease(Math.min(1, (t - 2.02)/(RB.land - 2.02))));                  // 한 걸음 물러남
   p.x = bx + x.fx*dist; p.z = bz + x.fz*dist;
   const eye = x.y + 1.6, lookY = t < 2.02 ? torsoY : 1.1*S;
   let d = Math.atan2(-(bx - p.x), -(bz - p.z)) - yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -3468,8 +3466,7 @@ function updateRapierBossExec(dt){
   const at = key => x.tg ? x.tg.w[key].clone() : null;
   if (!x.s1 && t >= .08){ x.s1 = true; sfx.execStep(); }
   if (!x.s2 && t >= .22){ x.s2 = true; sfx.execStep(); }
-  if (!x.s3 && t >= .36){ x.s3 = true; sfx.execJump(); }
-  if (!x.s5 && t >= RB.land){ x.s5 = true; sfx.execLand(); }
+  if (!x.s3 && t >= .36){ x.s3 = true; sfx.execStep(); }
   const stab = (key, first) => { // 찌르기 한 번: 불꽃 + 피해
     sfx.execPierce(); hitStopT = .05; shakeT = Math.max(shakeT, .12); if (x.tg) sparkAt(at(key));
     if (enemies.includes(e)){ hitEnemy(e, 5, 'bossExec'); if (first){ e.react = 'stab'; e.reactT = 0; dropShield(e); sfx.clang(); sfx.bossRoar(); } }
@@ -3685,13 +3682,14 @@ function animateSword(dt, dip){
     const at = (aim, hx, hy, hz, edge) => poseDir(hx, hy, hz, tipTo(aim, hx, hy, hz), edge || [0, 1, 0]);
     const L = a => at(a, -.26 + a.x*.2, .02 + a.y*.2, -.46), X = a => at(a, -.05 + a.x*.25, -.085 + a.y*.25, -.78); // 당김 · 뻗음
     const lp = (a, b, u) => ({x: lerp(a.x, b.x, u), y: lerp(a.y, b.y, u)});
-    const H = (u) => at(lp(P.ls, P.rs, u*1.3 - .15), lerp(-.3, .3, u), -.08, -.55, [1, 0, 0]);   // 가로 베기: 왼 어깨 → 오른 어깨 (조금 넘게)
-    const V = (u) => at(lp(P.neck, P.low, u*1.3 - .15), .04, lerp(.04, -.22, u), -.55, [0, -1, 0]); // 세로 베기: 목 아래 → 몸통 아래
+    // 베기: 칼끝이 찌른 두 점을 지나가는 선을 따라, 몸 바깥에서 시작해 반대쪽 바깥까지 크게 휘두름 (u = 0 → 1)
+    const H = (u) => at(lp(P.ls, P.rs, u*2.2 - .6), lerp(-.55, .5, u), lerp(.02, -.1, u), lerp(-.42, -.5, u), [1, 0, 0]);    // 가로: 왼쪽 바깥 → 두 어깨 → 오른쪽 바깥
+    const V = (u) => at(lp(P.neck, P.low, u*2.2 - .6), lerp(.12, .06, u), lerp(.22, -.34, u), lerp(-.42, -.5, u), [0, -1, 0]); // 세로: 머리 위 → 목 아래·몸통 아래 → 다리 쪽
     const R = RB;
     T = keyPose([[0, idle], [.5, L(P.ls)], [R.ls, X(P.ls)], [R.ls + .03, X(P.ls)], [R.rs - .05, L(P.rs)], [R.rs, X(P.rs)], [R.rs + .05, X(P.rs)],
                  [R.neck - .14, L(P.neck)], [R.neck, X(P.neck)], [R.neck + .03, X(P.neck)], [R.low - .05, L(P.low)], [R.low, X(P.low)], [R.low + .04, X(P.low)],
-                 [R.hSlash - .1, H(0)], [R.hSlash, H(.6)], [R.hSlash + .05, H(1)], [R.hSlash + .1, H(1)],
-                 [R.vSlash - .12, V(0)], [R.vSlash, V(.6)], [R.vSlash + .05, V(1)], [R.vSlash + .14, V(1)], [R.end, idle]], t);
+                 [R.hSlash - .14, H(0)], [R.hSlash - .03, H(.35)], [R.hSlash + .03, H(.65)], [R.hSlash + .1, H(1)], [R.hSlash + .16, H(1)],
+                 [R.vSlash - .16, V(0)], [R.vSlash - .03, V(.35)], [R.vSlash + .03, V(.65)], [R.vSlash + .1, V(1)], [R.vSlash + .2, V(1)], [R.end, idle]], t);
     snap = true;
   } else if (exec && exec.boss){
     const B2 = {x:.1, y:-.06, z:-.95, rx:-1.5, ry:.1, rz:.1}, B5 = {x:-.05, y:-.55, z:-.7, rx:-2.4, ry:0, rz:-.15};
