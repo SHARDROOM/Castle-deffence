@@ -241,7 +241,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 5647af</div>
+<div id="buildVer" class="hud">v2026.11.05 · a286e7</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -1966,8 +1966,12 @@ function makeSoldier(type){
     const prism = (r, h, mat, y) => { const m = add(neck, new THREE.CylinderGeometry(r, r, h, 9), mat, 0, y, 0, true); m.rotation.y = Math.PI/9; return m; };
     prism(.23, .56, HF(0xd4a640), .25); prism(.245, .06, HF(0x9c7424), -.01); prism(.2, .05, HF(0x9c7424), .555);
     const HZ = .23*Math.cos(Math.PI/9);                                                                   // 정면 면까지 거리
-    P(neck, .05, .3, .03, black, 0, .27, HZ, 0, 0, 0, true); P(neck, .26, .05, .03, black, 0, .31, HZ, 0, 0, 0, true); // 십자 눈구멍 (정면 면 위)
-    P(neck, .03, .5, .03, goldL, .07, .25, HZ - .005, 0, 0, 0, true); P(neck, .03, .5, .03, goldL, -.07, .25, HZ - .005, 0, 0, 0, true);
+    P(neck, .05, .3, .03, black, 0, .27, HZ + .004, 0, 0, 0, true);                                      // 십자 눈구멍: 세로 (정면 면 위)
+    { const FW = .23*Math.sin(Math.PI/9), ext = .055;                                                     // 정면 면의 반폭, 옆 면으로 이어지는 길이
+      P(neck, FW*2 + .004, .05, .03, black, 0, .31, HZ + .004, 0, 0, 0, true);                            // 가로: 정면 면
+      for (const k of [-1, 1]){ const f = new THREE.Group(); f.rotation.y = k*2*Math.PI/9; neck.add(f);   // 가로: 양옆 면에 면 각도대로 꺾여 붙음
+        P(f, ext + .004, .05, .03, black, -k*(FW - ext/2), .31, HZ + .004, 0, 0, 0, true); } }
+    P(neck, .03, .5, .02, goldL, .07, .25, HZ - .004, 0, 0, 0, true); P(neck, .03, .5, .02, goldL, -.07, .25, HZ - .004, 0, 0, 0, true); // 장식 줄은 눈구멍보다 뒤 (눈구멍을 가리지 않게)
     P(neck, .44, .1, .4, goldD, 0, -.06, 0);                                                               // 목가리개
     // 흉갑: 좌우 두 판을 V자로 기울여 가운데 능선을 세움, 윗가슴 판, 등판
     for (const sx of [-1, 1]) P(chest, .32, .5, .14, gold, sx*.14, .32, .14, 0, sx*.3, 0);             // 두 판이 가운데에서 만나며 앞으로 튀어나옴
