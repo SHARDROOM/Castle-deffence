@@ -241,7 +241,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 3f52a2</div>
+<div id="buildVer" class="hud">v2026.11.05 · d57e6a</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -2842,7 +2842,7 @@ const BOSS_FX = {
 };
 // ---------- 왕국의 마지막 기사: 등장 → 허리 칼집에서 대검을 뽑아 높이 들었다가 → 두 손 가드 ----------
 // 칼 뽑기: 왼손으로 칼이 든 칼집을 허리에서 떼어 가슴 앞에 가로로 들고 → 오른손이 칼자루를 잡고 → 두 손을 벌려 뽑음 → 칼집을 다시 허리에
-const KN_DRAW = {grab:.45, lift:1.0, clear:1.6, back:2.2, free:2.45, high:2.45, guard:3.0, rel:1.72}; // 칼집 잡음 · 들어 올림 · 칼끝까지 빠짐 · 칼집 제자리 · 왼손 놓음 · 높이 듦 · 가드 · 빠지는 거리
+const KN_DRAW = {grab:.45, lift:1.0, clear:1.6, back:2.2, free:2.45, guard:3.1, rel:1.72}; // 칼집 잡음 · 들어 올림 · 칼끝까지 빠짐 · 칼집 제자리 · 왼손 놓음 · 칼끝이 플레이어를 가리킴 · 빠지는 거리
 const KS_HELD = {pos:new THREE.Vector3(.12, .52, .55), rot:new THREE.Euler(0, 0, -Math.PI/2 + .12)};  // 가슴 앞에 가로로 든 칼집 (입구가 오른쪽, 살짝 위로)
 const KS_DRAWN = new THREE.Vector3(-.62, .5, .52);                                                    // 다 뽑았을 때 칼집 입구 자리 (왼쪽으로 벌림)
 const KN_POSE = { // 각 뼈의 회전 [x, y, z] (오른팔 x가 음수면 앞으로 듦, z가 양수면 바깥으로). 칼집·칼을 쥔 동안 팔은 IK가 덮어씀
@@ -2854,10 +2854,8 @@ const KN_POSE = { // 각 뼈의 회전 [x, y, z] (오른팔 x가 음수면 앞�
           rig:[0, 0, 0], thighL:[.15, 0, -.1], thighR:[-.15, 0, .1], kneeL:[.25, 0, 0], kneeR:[.2, 0, 0]},
   apart: {armR:[-1, 0, .6], foreR:[-.4, 0, 0], armL:[-1, 0, -.6], foreL:[-.4, 0, 0], chest:[-.04, -.12, 0], neck:[0, -.1, 0],        // 두 손을 양옆으로 벌려 뽑음
           rig:[0, -.05, 0], thighL:[.15, 0, -.12], thighR:[-.15, 0, .12], kneeL:[.25, 0, 0], kneeR:[.2, 0, 0]},
-  high:  {armR:[-2.75, 0, .2], foreR:[-.25, 0, 0], armL:[.05, 0, -.2], foreL:[-.3, 0, 0], chest:[-.1, -.05, 0], neck:[-.1, 0, 0],   // 칼을 높이 세워 듦
-          rig:[0, 0, 0], thighL:[.1, 0, 0], thighR:[-.1, 0, 0], kneeL:[.15, 0, 0], kneeR:[.1, 0, 0]},
-  guard: {armR:[-1.05, 0, .05], foreR:[-1.0, 0, 0], armL:[-1.0, 0, -.5], foreL:[-1.15, 0, 0], chest:[.05, -.15, 0], neck:[0, .1, 0], // 두 손으로 칼을 앞으로 겨눔
-          rig:[0, 0, 0], thighL:[.25, 0, 0], thighR:[-.15, 0, 0], kneeL:[.3, 0, 0], kneeR:[.2, 0, 0]},
+  point: {armR:[-1.5, 0, .1], foreR:[-.1, 0, 0], armL:[.1, 0, -.25], foreL:[-.35, 0, 0], chest:[0, -.25, 0], neck:[0, .2, 0],     // 한 손으로 칼을 눕힌 채 플레이어를 가리킴 (오른팔은 IK)
+          rig:[0, -.1, 0], thighL:[.25, 0, -.08], thighR:[-.2, 0, .08], kneeL:[.3, 0, 0], kneeR:[.2, 0, 0]},
 };
 function knightPose(e, A, B, k, f){ // 두 자세 사이 k로 섞은 자세를 f만큼 따라감
   for (const bone in A){
@@ -2876,6 +2874,25 @@ function armIK(up, el, targetW, L1, L2, pole, w){ // 두 마디 팔 IK: 손(아�
   const qe = new THREE.Quaternion().setFromUnitVectors(IK_DOWN, H.sub(E).normalize().applyQuaternion(qu.clone().invert()));
   up.quaternion.slerp(qu, w); el.quaternion.slerp(qe, w);
 }
+// 눕힌 칼로 플레이어를 가리킴: k = 0이면 뽑은 직후 자리·방향, 1이면 오른 어깨 앞에서 칼끝이 정면(플레이어)을 향함. 칼은 수평 그대로
+const KN_AIM_GRIP = new THREE.Vector3(.36, 1.45, .72), KN_AIM_DIR = new THREE.Vector3(0, 0, 1); // 기사 몸 기준 (+z = 앞)
+function knightAim(e, k){
+  e.g.updateMatrixWorld(true);
+  const grip = e.swFrom.grip.clone().lerp(KN_AIM_GRIP, k);
+  // 칼끝이 향할 곳: 플레이어 머리 (몸 기준). 좌우는 수평으로 돌고, 위아래는 플레이어 쪽으로 살짝 내려감
+  const eye = e.g.worldToLocal(yawObj.position.clone()), to = eye.sub(grip);
+  const a0 = Math.atan2(e.swFrom.dir.x, e.swFrom.dir.z), a1 = Math.atan2(to.x, to.z); let da = a1 - a0; da = Math.atan2(Math.sin(da), Math.cos(da));
+  const tilt = Math.atan2(to.y, Math.hypot(to.x, to.z)), ang = a0 + da*k, el = lerp(Math.asin(clamp(e.swFrom.dir.y, -1, 1)), tilt, k);
+  const dir = new THREE.Vector3(Math.sin(ang)*Math.cos(el), Math.sin(el), Math.cos(ang)*Math.cos(el));
+  armIK(e.armR, e.foreR, e.g.localToWorld(grip.clone()), ARM_L1, .42, IK_POLE_R, 1);
+  e.foreR.updateMatrixWorld(true);
+  // 칼: 쥔 곳은 손에, 칼날 방향은 dir (몸 기준 → 아래팔 기준으로 바꿔서)
+  const dW = e.g.localToWorld(dir.clone()).sub(e.g.localToWorld(new THREE.Vector3()));
+  const fq = new THREE.Quaternion(); e.foreR.getWorldQuaternion(fq);
+  const dL = dW.applyQuaternion(fq.invert()).normalize();
+  const q = new THREE.Quaternion().setFromUnitVectors(IK_DOWN, dL);
+  e.kSword.quaternion.copy(q); e.kSword.position.copy(GRIP).sub(GRIP.clone().applyQuaternion(q));
+}
 const IK_POLE_R = new THREE.Vector3(1, -.6, -.7), IK_POLE_L = new THREE.Vector3(-1, -.6, -.7); // 팔꿈치는 바깥·아래·뒤로
 const GRIP = new THREE.Vector3(0, -.42, 0);                                                     // 칼 좌표에서 쥐는 곳 (= 오른 아래팔에서 손)
 function updateKnight(e, dt, p){
@@ -2891,8 +2908,7 @@ function updateKnight(e, dt, p){
     if (t < D.grab) knightPose(e, P.stand, P.grab, ss(t/D.grab), f);
     else if (t < D.lift) knightPose(e, P.grab, P.hold, ss((t - D.grab)/(D.lift - D.grab)), f);
     else if (t < D.clear) knightPose(e, P.hold, P.apart, ss((t - D.lift)/(D.clear - D.lift)), f);
-    else if (t < D.high) knightPose(e, P.apart, P.high, ss((t - D.clear)/(D.high - D.clear)), f);
-    else knightPose(e, P.high, P.guard, ss((t - D.high)/(D.guard - D.high)), f);
+    else knightPose(e, P.apart, P.point, ss((t - D.clear)/(D.guard - D.clear)), f);
     // 칼집이 놓일 자리: 허리 → 가슴 앞 가로 → (뽑으며 왼쪽으로) → 허리
     const rest = {pos:e.KS_POS, q:new THREE.Quaternion().setFromEuler(e.KS_ROT)}, held = {pos:KS_HELD.pos, q:new THREE.Quaternion().setFromEuler(KS_HELD.rot)};
     const rel = D.rel*ss((t - D.lift)/(D.clear - D.lift));                                  // 칼이 칼집에서 빠진 길이
@@ -2915,19 +2931,19 @@ function updateKnight(e, dt, p){
       // 오른손: 칼집을 들어 올리는 동안 칼자루로 다가가 잡고, 칼자루를 따라 오른쪽으로 뽑아냄
       const wR = ss((t - (D.grab + .15))/(D.lift - D.grab - .15));
       if (wR > 0) armIK(e.armR, e.foreR, e.kSword.localToWorld(GRIP.clone()), ARM_L1, .42, IK_POLE_R, wR);
-      if (t >= D.clear){ // 칼끝까지 빠짐 → 보이는 자리 그대로 손으로 옮기고, 쥔 곳을 축으로 손에 맞게 돌림
+      if (t >= D.clear){ // 칼끝까지 빠짐 → 보이는 자리 그대로 손으로 옮김 (눕힌 채)
         e.cleared = true; e.kBlade.scale.y = 1; e.foreR.updateMatrixWorld(true); e.foreR.attach(e.kSword);
-        e.swFrom = {q:e.kSword.quaternion.clone(), t}; sfx.iai(); shakeT = Math.max(shakeT, .15);
+        e.g.updateMatrixWorld(true);
+        e.swFrom = {t, grip:e.g.worldToLocal(e.kSword.localToWorld(GRIP.clone())), dir:e.g.worldToLocal(e.kSword.localToWorld(new THREE.Vector3(0, -1, 0))).sub(e.g.worldToLocal(e.kSword.localToWorld(new THREE.Vector3())))};
+        e.swFrom.dir.normalize(); sfx.iai(); shakeT = Math.max(shakeT, .1);
       }
-    } else if (t < D.guard){
-      const k = ss((t - e.swFrom.t)/.4), qq = e.swFrom.q.clone().slerp(new THREE.Quaternion(), k);
-      e.kSword.quaternion.copy(qq); e.kSword.position.copy(GRIP).sub(GRIP.clone().applyQuaternion(qq)); // 쥔 곳은 손에서 떨어지지 않음
-    }
+    } else knightAim(e, ss((t - e.swFrom.t)/(D.guard - e.swFrom.t)));                          // 눕힌 칼을 천천히 돌려 칼끝으로 플레이어를 가리킴
     if (!e.sheathed && t >= D.back){ e.sheathed = true; sfx.sheath(); }                          // 빈 칼집을 허리에 다시 꽂음
-    if (t >= D.guard){ e.state = 'guard'; e.st = 0; e.kBlade.scale.y = 1; e.kSword.position.set(0, 0, 0); e.kSword.quaternion.identity(); e.kSheath.position.copy(e.KS_POS); e.kSheath.rotation.copy(e.KS_ROT); }
-  } else { // 가드 자세로 버팀 (공격 패턴은 다음 단계에서)
-    knightPose(e, P.guard, P.guard, 0, f);
+    if (t >= D.guard){ e.state = 'guard'; e.st = 0; e.kBlade.scale.y = 1; e.kSheath.position.copy(e.KS_POS); e.kSheath.rotation.copy(e.KS_ROT); }
+  } else { // 칼끝으로 플레이어를 가리킨 채 버팀 (공격 패턴은 다음 단계에서)
+    knightPose(e, P.point, P.point, 0, f);
     e.chest.rotation.x += Math.sin(e.t*1.6)*.01; // 숨쉬기
+    knightAim(e, 1);
   }
   updateBossBar(e);
 }
