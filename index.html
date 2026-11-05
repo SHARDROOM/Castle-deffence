@@ -241,7 +241,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 5b5dea</div>
+<div id="buildVer" class="hud">v2026.11.05 · a33a17</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3261,11 +3261,11 @@ function knightClose(e, dt, p){
 }
 // ---------- 왕국의 마지막 기사: 중간 거리 연속기 ----------
 // x1wind: 칼을 왼쪽 어깨 위로 메며 감음 → x1: 어깨 위에서 내리치듯 오른쪽 아래로 벰(한 걸음 밀고 들어감) →
-// x2: 그 힘으로 멈추지 않고 한 바퀴 돌며 수평으로 한 번 더 벰 → crouch: 웅크림 → rise: 하늘 높이 뛰어오르며 칼을 오른쪽 어깨 위로 →
+// x2: 그 힘으로 멈추지 않고 한 바퀴 돌며 수평으로 한 번 더 벰 → crouch: 웅크림 → rise: 하늘 높이(12m) 뛰어오르며 칼을 오른쪽 어깨 위로 →
 // hover: 잠깐 떠서 플레이어를 내려다봄 → dive: 몸 전체를 앞으로 기울여 사선으로 플레이어에게 떨어지며 사선으로 베어 착지
 // (착지 일격은 패리 강도가 KX.breakPow보다 낮으면 패리가 깨짐) → xland: 착지 충격을 받아내며 일어나 기본 자세로
-const KX = {wind:.42, slash:.28, spin:.62, crouch:.26, rise:.5, hover:.42, dive:.34, land:.8, cd:4.6,
-            h:7, reach:6.4, dmg1:22, dmg2:22, dmg3:34, breakPow:130};
+const KX = {wind:.42, slash:.28, spin:.62, crouch:.3, rise:.62, hover:.42, dive:.42, land:.8, cd:4.6,
+            h:12, reach:6.4, dmg1:22, dmg2:22, dmg3:34, breakPow:130};
 const KH_X = {
   spinOut:{grip:new THREE.Vector3(.48, 1.32, .58), dir:new THREE.Vector3(.95, -.05, .3)},   // 수평으로 오른쪽 바깥으로 뻗은 칼 (돌며 휩씀)
 };
