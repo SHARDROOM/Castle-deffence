@@ -236,7 +236,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 90b02c</div>
+<div id="buildVer" class="hud">v2026.11.05 · a967bd</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -254,6 +254,8 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
   <label class="row toggle"><span>자이로 조준<small>폰을 기울이고 돌려서 시점 이동 (터치 조작과 함께 쓸 수 있음)</small></span><input type="checkbox" id="gyroIn"></label>
   <button class="pbtn hide" id="gyroTabBtn">게임만 새 탭으로 열기 (자이로용)</button>
   <label class="row toggle"><span>자이로: 조준할 때만</span><input type="checkbox" id="gyroAdsIn"></label>
+  <label class="row toggle"><span>자이로 상하 반전</span><input type="checkbox" id="gyroInvYIn"></label>
+  <label class="row toggle"><span>자이로 좌우 반전</span><input type="checkbox" id="gyroInvXIn"></label>
   <div class="row"><span>자이로 감도</span><input type="range" id="gyroSensIn" min="20" max="300" step="5" aria-label="자이로 감도"><output id="gyroSensOut"></output></div>
   <label class="row toggle"><span>사이드 조준기 자동 전환<small>끄면 화면에 사이드 버튼이 생겨 직접 전환 (PC: V 키)</small></span><input type="checkbox" id="sideAutoIn"></label>
   <div class="row"><span>자동 전환 거리</span><input type="range" id="sideDistIn" min="3" max="25" step="1" aria-label="사이드 조준기 자동 전환 거리"><output id="sideDistOut"></output></div>
@@ -4284,7 +4286,10 @@ function gyroHandler(e){
   const ang = (screen.orientation && screen.orientation.angle != null) ? screen.orientation.angle : (window.orientation || 0);
   const a = (r.alpha || 0), b = (r.beta || 0), g = (r.gamma || 0), D = Math.PI/180*dt; // 도/초 → 라디안
   let dYaw, dPitch; // 화면 방향에 따라 축을 바꿈 (왼쪽으로 돌리면 +, 위로 들면 +)
-  if (ang === 90){ dYaw = b; dPitch = -g; } else if (ang === 270 || ang === -90){ dYaw = -b; dPitch = g; } else if (ang === 180){ dYaw = -g; dPitch = -b; } else { dYaw = g; dPitch = b; }
+  // 상하: 안드로이드 크롬에서 위로 들면 시점이 내려가던 문제가 있어 부호를 뒤집음 (기기마다 다르면 설정의 상하·좌우 반전으로 맞춤)
+  if (ang === 90){ dYaw = b; dPitch = g; } else if (ang === 270 || ang === -90){ dYaw = -b; dPitch = -g; } else if (ang === 180){ dYaw = -g; dPitch = b; } else { dYaw = g; dPitch = -b; }
+  if (settings.gyroInvY) dPitch = -dPitch;
+  if (settings.gyroInvX) dYaw = -dYaw;
   const k = (settings.gyroSens || 1)*(camera.fov/75)*(scoped ? (settings.scopeSens || 1) : 1);
   yaw += dYaw*D*k; pitch = clamp(pitch + dPitch*D*k, -1.4, 1.4);
 }
@@ -4308,10 +4313,11 @@ function enableGyro(){ // 반드시 터치(클릭) 처리 안에서 바로 불�
 $('gyroIn').checked = !!settings.gyro;
 $('gyroIn').addEventListener('click', () => { settings.gyro = $('gyroIn').checked; saveSettings(); if (settings.gyro){ gyroSeen = false; enableGyro(); } }); // change 대신 click에서 바로 (아이폰 권한 조건)
 $('gyroAdsIn').checked = !!settings.gyroAds; $('gyroAdsIn').onchange = () => { settings.gyroAds = $('gyroAdsIn').checked; saveSettings(); };
+for (const [id, key] of [['gyroInvYIn', 'gyroInvY'], ['gyroInvXIn', 'gyroInvX']]){ $(id).checked = !!settings[key]; $(id).onchange = () => { settings[key] = $(id).checked; saveSettings(); }; }
 { const gi = $('gyroSensIn'); gi.value = Math.round((settings.gyroSens || 1)*100); $('gyroSensOut').textContent = (gi.value/100).toFixed(2);
   gi.oninput = () => { settings.gyroSens = gi.value/100; $('gyroSensOut').textContent = settings.gyroSens.toFixed(2); saveSettings(); }; }
 if (settings.gyro){ if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') addEventListener('touchend', function once(){ removeEventListener('touchend', once); enableGyro(); }); else enableGyro(); } // 아이폰은 터치를 뗄 때 권한 요청
-if (!isTouch){ ['gyroIn','gyroAdsIn','gyroSensIn'].forEach(id => $(id).closest('.row').classList.add('hide')); }
+if (!isTouch){ ['gyroIn','gyroAdsIn','gyroInvYIn','gyroInvXIn','gyroSensIn'].forEach(id => $(id).closest('.row').classList.add('hide')); }
 $('sideAutoIn').checked = settings.sideAuto !== false; $('sideAutoIn').onchange = () => { settings.sideAuto = $('sideAutoIn').checked; manualCant = false; saveSettings(); };
 { const sdI = $('sideDistIn'); sdI.value = settings.sideDist || 9; $('sideDistOut').textContent = sdI.value + 'm';
   sdI.oninput = () => { settings.sideDist = +sdI.value; $('sideDistOut').textContent = sdI.value + 'm'; saveSettings(); }; }
