@@ -51,6 +51,9 @@ canvas{display:block}
 #bossBar.enraged .bn{color:#ff6a4a;text-shadow:0 0 8px rgba(255,60,30,.8),0 2px 0 rgba(0,0,0,.45)}
 #bossBar.enraged #bossFill{background:linear-gradient(90deg,#8a0f0a,#ff3a1a)}
 #bossFill{height:100%;width:100%;background:linear-gradient(90deg,#b8322a,#e0663a);transition:width .15s}
+#sanctFx{position:fixed;inset:0;z-index:3;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(255,220,110,.06) 40%,rgba(255,205,80,.32) 100%);box-shadow:inset 0 0 120px 30px rgba(255,214,90,.45)}
+#sanctFx.break{background:rgba(255,246,210,.5)}
+#bossBar.holy #bossFill{background:linear-gradient(90deg,#ffe9a0,#fff7d6);box-shadow:0 0 8px #ffd166}
 #slowFx{position:fixed;inset:0;z-index:3;pointer-events:none;opacity:0;box-shadow:inset 0 0 90px 20px rgba(110,170,255,.65);transition:opacity .2s}
 #goldTxt{font-family:"Black Han Sans",sans-serif;font-size:18px;color:#ffd166;margin-top:4px;text-shadow:0 2px 0 rgba(0,0,0,.4)}
 .ret{position:fixed;left:50%;top:50%;z-index:3;pointer-events:none;opacity:0;transform:translate(-50%,-50%)}
@@ -106,7 +109,7 @@ canvas{display:block}
 #slotLines line{stroke:rgba(255,244,230,.4);stroke-width:1.2;stroke-dasharray:3 3}
 #slotLines circle{fill:#ffd166}
 #shop{background:transparent}
-body.shopping .hud,body.shopping .btn,body.shopping #cross,body.shopping #shopBtn,body.shopping #vig,body.shopping .hitEdge,body.shopping #slowFx,body.shopping .ret,body.shopping #scope,body.shopping #banner,body.shopping #notice,body.shopping #hint{visibility:hidden}
+body.shopping .hud,body.shopping .btn,body.shopping #cross,body.shopping #shopBtn,body.shopping #vig,body.shopping .hitEdge,body.shopping #slowFx,body.shopping #sanctFx,body.shopping .ret,body.shopping #scope,body.shopping #banner,body.shopping #notice,body.shopping #hint{visibility:hidden}
 body.shopping #gear,body.shopping #settings{display:none!important}
 .slotBtn small{display:block;font-size:10px;font-weight:500;color:var(--sub)}
 .screen .slotBtn.sel{background:rgba(26,16,28,.95);color:#ffd166;border-color:#ffd166}
@@ -236,14 +239,14 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="itemBar" class="hud"><div class="itemB" id="it_bandage">🩹<b>0</b><i>1</i></div><div class="itemB" id="it_adren">💉<b>0</b><i>2</i></div><div class="itemB" id="it_medkit">🧰<b>0</b><i>3</i></div></div>
 <div id="adrenFx"></div>
 <div id="vig"></div>
-<div id="slowFx"></div>
+<div id="slowFx"></div><div id="sanctFx"></div>
 <div id="bossBar" class="hud hide"><div class="bn">철의 거인</div><div class="bb"><div id="bossFill"></div></div><div id="bossPoise"><div class="pg"><div id="poiseFill"></div></div></div></div>
 <div id="hitTop" class="hitEdge"></div><div id="hitBottom" class="hitEdge"></div><div id="hitLeft" class="hitEdge"></div><div id="hitRight" class="hitEdge"></div>
 <div id="banner"></div>
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · c7e50c</div>
+<div id="buildVer" class="hud">v2026.11.05 · f41a74</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -555,6 +558,10 @@ const sfx = {
   bossSlam(){ noise(.7, 900, .5, 1.0); tone('square', 150, 45, .55, .4); },
   bossShield(){ tone('triangle', 700, 1300, .35, .22); },
   bossBonk(){ tone('square', 320, 110, .35, .3); noise(.35, 800, .7, .7); },
+  holyHum(){ tone('sine', 220, 330, 1.2, .2); tone('triangle', 330, 495, 1.2, .08); noise(1.1, 2400, .5, .12); },
+  holyBell(){ tone('sine', 880, 878, 1.6, .2); tone('sine', 1320, 1316, 1.4, .12, .02); tone('sine', 1760, 1752, 1.1, .08, .04); tone('triangle', 440, 438, 1.8, .12); },
+  holyCrack(){ noise(.18, 6000, 1.2, .5, 'highpass'); tone('sine', 2200, 1500, .3, .14); tone('sine', 1650, 1100, .35, .1, .04); },
+  holyShatter(){ noise(.4, 6500, 1, .8, 'highpass'); for (let i = 0; i < 8; i++) tone('sine', 2800 - i*230, 2500 - i*250, .3, .1, i*.06); noise(1.3, 900, .5, .55, 'lowpass', .12); tone('sine', 330, 110, 1.2, .2, .1); },
   clang(){ if (!actx || actx.currentTime - lastClang < .05) return; lastClang = actx.currentTime; tone('square', 1900, 1500, .06, .12); noise(.05, 5000, 3, .25, 'bandpass'); },
   swing(){ noise(.18, 2600, .8, .45, 'bandpass'); },
   slashHit(){ noise(.12, 1800, .7, .6, 'bandpass'); tone('sawtooth', 300, 120, .1, .2); },
@@ -2499,6 +2506,7 @@ function shoot(){
         else { sparkAt(h.point); sfx.clang(); dmgMap.set(e, (dmgMap.get(e)||0) + W.dmg*shieldMul(e)); anyHit = true; } // 방패에 맞으면 피해 감소 (광폭화 땐 더 많이)
         break;
       }
+      if (h.object.userData.mark !== undefined){ end = h.point; const fd = W.dmg*(W.falloff && h.distance > W.falloff ? .4 : 1); if (markHit(e, h.object.userData.mark, fd*dmgMul())) anyHit = true; break; } // 기사의 성스러운 표식
       if (seen.has(e)) continue; seen.add(e);
       const crit = h.object.userData.head === true;
       let d = W.dmg * (crit ? 2 : 1); // dmgMul은 Combat이 곱함
@@ -2573,6 +2581,7 @@ function applyHit(e, r){ // Combat.hit 결과를 게임에 적용
 }
 // 적에게 피해를 준다. base = 공격 고유 수치, kind = Combat.KINDS의 종류, from = 공격 위치 {x, z}
 function hitEnemy(e, base, kind, from, finisher){
+  if (sanct && sanct.on && sanct.e === e) return sanctHit(e, base, kind); // 기사의 성역: 몸은 피해 면역, 근접 공격은 노린 표식에
   if (e.type === 'knight' && e.state === 'backstep') return {applied:false, dealt:0, shielded:false, heal:0, killed:false, kill:null}; // 기사가 뒤로 뛰어 피하는 중
   return applyHit(e, Combat.hit(e, {base, kind, from, finisher}, combatCtx())); } // finisher: 처형의 마지막 일격 (처형 중인 적은 그 전엔 죽지 않음)
 let adsK = 0; // 0 = 허리 사격 자세, 1 = 조준기를 눈앞에 댄 자세
@@ -3451,16 +3460,252 @@ function knightPunish(e, dt, p){ // 기사 쪽: 착지에서 일어나 → 다�
   knightTrail(e, t > KP.slash && t < KP.swEnd + .07, dt);
   if (!punish || punish.e !== e){ e.state = 'guard'; e.st = .8; e.atkCd = 3; e.punSnd = false; } // 연출이 끝나면 (플레이어 쪽이 정리) 기본 자세로
 }
+// ---------- 왕국의 마지막 기사: 성역 (체력 70% 이하부터, 끝나고 35초 뒤 다시) ----------
+// ① 발을 굴러 발밑에 노란 성역을 펼침 → ② 칼끝으로 땅을 가볍게 찍음: 그 순간 경기장 전체가 노란 기운으로 덮임
+//    기사: 피해 면역 + 체력 회복, 플레이어: 이동 속도 감소·점프 불가·패링 강도 감소
+// ③ 머리, 한쪽 어깨, 몸통(앞), 등에 성스러운 표식. 표식 하나에 일정 피해를 주면 깨지며 그로기 1 누적
+// ④ 표식을 모두 깨거나 그로기가 꽉 차면 즉시 해제: 노란 기운이 깨져 무너져 내리고 기사는 주춤하며 물러남 → 그로기가 꽉 찼으면 그대로 그로기
+const KS = {stompUp:.45, stompHit:.56, stomp:1.15, tapTurn:.4, tapRaise:.85, tapHit:.98, tap:1.8, grow:.75, carve:.75, field:10, dome:46,
+            regen:6, markHp:12, flinch:.95, flinchDist:2.6, cd:35, hpGate:.7, slow:.62, parryMul:.6, aim:.5};
+const SANCT_Y = new THREE.Color(0xffd36a);
+let sanct = null; // 성역 연출 (새 판에서 비움: resetBoss → clearSanct)
+const sanctOn = () => !!(sanct && sanct.on);
+const KB_STOMP_UP = {pt:-.06, py:0, ct:-.12, cy:0, tL:.28, tR:-1.35, kL:.42, kR:1.5, drop:0};   // 오른 무릎을 높이 듦
+const KB_STOMP = {pt:.06, py:0, ct:.18, cy:0, tL:.42, tR:-.38, kL:.62, kR:.5, drop:.18};       // 발을 내리찍으며 무게를 실음
+const KB_TAP = {pt:.08, py:0, ct:.24, cy:0, tL:.5, tR:-.4, kL:.75, kR:.7, drop:.2};             // 칼을 꽂으며 무릎을 굽혀 무게를 실음
+const KB_TAPUP = {pt:-.03, py:0, ct:-.1, cy:0, tL:.22, tR:-.15, kL:.15, kR:.1, drop:-.03};     // 칼을 치켜들며 몸을 폄
+const KB_FLINCH = {pt:-.16, py:.1, ct:-.34, cy:.14, tL:-.12, tR:-.45, kL:.55, kR:.75, drop:.12}; // 주춤: 상체가 뒤로 젖혀짐
+const KH_TAPDN = {grip:new THREE.Vector3(.04, 2.05, .9), dir:new THREE.Vector3(0, -.85, .53)}; // ① 칼을 들어 올리며 칼끝을 앞·아래로 돌림 (칼이 길어서 땅에 닿지 않게 들면서)
+const KH_TAPUP = {grip:new THREE.Vector3(.04, 2.3, .85), dir:new THREE.Vector3(0, -1, 0)};     // ② 수직 그대로 높이 치켜듦 (팔이 닿는 데까지)
+const KH_TAP = {grip:new THREE.Vector3(.04, 1.68, .85), dir:new THREE.Vector3(0, -1, 0)};      // ③ 그대로 수직(90°)으로 내려 앞 땅에 꽂음
+const KH_SAG = {grip:new THREE.Vector3(.3, .95, .55), dir:new THREE.Vector3(.35, -.55, .76)}; // 주춤하며 칼끝이 처짐
+function sanctTex(kind){ // 'field' = 바닥 성역 무늬, 'mark' = 성스러운 표식. 한 번만 그림
+  sanctTex.c = sanctTex.c || {};
+  if (sanctTex.c[kind]) return sanctTex.c[kind];
+  const N = kind === 'field' ? 512 : 128, cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const c = cv.getContext('2d'), C = N/2;
+  if (kind === 'field'){
+    const gr = c.createRadialGradient(C, C, 0, C, C, C); gr.addColorStop(0, 'rgba(255,226,130,.55)'); gr.addColorStop(.75, 'rgba(255,210,90,.28)'); gr.addColorStop(.97, 'rgba(255,200,70,.5)'); gr.addColorStop(1, 'rgba(255,200,70,0)');
+    c.fillStyle = gr; c.fillRect(0, 0, N, N);
+    c.strokeStyle = 'rgba(255,246,200,.95)'; c.lineCap = 'round';
+    for (const [r, w] of [[.95, 6], [.86, 3], [.6, 4], [.52, 2], [.22, 3]]){ c.lineWidth = w; c.beginPath(); c.arc(C, C, C*r, 0, Math.PI*2); c.stroke(); }
+    for (let i = 0; i < 24; i++){ // 바깥 고리의 작은 십자
+      const a = i/24*Math.PI*2, x = C + Math.cos(a)*C*.905, y = C + Math.sin(a)*C*.905, s = C*.03; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(x - s, y); c.lineTo(x + s, y); c.moveTo(x, y - s*1.4); c.lineTo(x, y + s*1.4); c.stroke();
+    }
+    c.lineWidth = 3; c.beginPath(); // 가운데 별 (두 사각형)
+    for (const off of [0, Math.PI/4]) for (let i = 0; i <= 4; i++){ const a = off + i*Math.PI/2, x = C + Math.cos(a)*C*.58, y = C + Math.sin(a)*C*.58; i ? c.lineTo(x, y) : c.moveTo(x, y); }
+    c.stroke();
+    c.lineWidth = 7; c.beginPath(); c.moveTo(C, C - C*.42); c.lineTo(C, C + C*.42); c.moveTo(C - C*.3, C - C*.1); c.lineTo(C + C*.3, C - C*.1); c.stroke();
+  } else {
+    const gr = c.createRadialGradient(C, C, 0, C, C, C); gr.addColorStop(0, 'rgba(255,250,220,.9)'); gr.addColorStop(.55, 'rgba(255,214,90,.55)'); gr.addColorStop(1, 'rgba(255,200,60,0)');
+    c.fillStyle = gr; c.fillRect(0, 0, N, N);
+    c.strokeStyle = '#fffbe8'; c.lineWidth = 7; c.beginPath(); c.arc(C, C, C*.74, 0, Math.PI*2); c.stroke();
+    c.lineWidth = 3; c.beginPath(); c.arc(C, C, C*.6, 0, Math.PI*2); c.stroke();
+    c.fillStyle = '#fffbe8'; c.fillRect(C - 7, C - C*.5, 14, C); c.fillRect(C - C*.36, C - C*.2, C*.72, 13); // 십자
+  }
+  const tx = new THREE.CanvasTexture(cv); sanctTex.c[kind] = tx; return tx;
+}
+// 표식 자리: 뼈, 위치, 바깥 방향(n), 크기, 정면에서만 노릴 수 있는가 (몸통·등)
+function markSpots(e){
+  const HZ = .23*Math.cos(Math.PI/9), sx = Math.random() < .5 ? -1 : 1;
+  return [
+    {name:'머리', bone:e.neck, pos:[0, .46, HZ + .014], n:[0, 0, 1], s:.16},
+    {name:sx < 0 ? '왼쪽 어깨' : '오른쪽 어깨', bone:e.kPaul[sx < 0 ? 0 : 1], pos:[sx*.05, .15, 0], n:[sx*.6, .8, 0], s:.22},
+    {name:'몸통', bone:e.chest, pos:[0, .47, .285], n:[0, 0, 1], s:.21, facing:true}, // 윗가슴 능선 (칼을 쥔 두 손보다 위)
+    {name:'등', bone:e.chest, pos:[.15, .14, -.218], n:[0, 0, -1], s:.2, facing:true},
+  ];
+}
+function startSanct(e){ // 발을 구름: 발밑에 성역
+  clearSanct();
+  const g = e.g, disc = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshBasicMaterial({map:sanctTex('field'), transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, polygonOffset:true, polygonOffsetFactor:-3}));
+  disc.rotation.x = -Math.PI/2; disc.position.set(g.position.x, .05, g.position.z); disc.scale.setScalar(.01); scene.add(disc);
+  sanct = {e, t:0, on:false, onT:0, disc, dome:null, motes:null, marks:[], ending:false, endT:0, shards:null, fogK:0};
+  sfx.bossStomp(); sfx.holyHum(); shakeT = Math.max(shakeT, .35); crackRing(g.position.x, g.position.z);
+}
+function sanctCover(e, tip){ // 칼끝을 찍음: 경기장 전체를 노란 기운이 덮음
+  if (!sanct || sanct.e !== e) return;
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 16, 0, Math.PI*2, 0, Math.PI/2), new THREE.MeshBasicMaterial({color:0xffd75e, transparent:true, opacity:.16, depthWrite:false, side:THREE.DoubleSide}));
+  dome.position.set(tip.x, 0, tip.z); dome.scale.setScalar(.01); scene.add(dome);
+  const N = 160, pos = new Float32Array(N*3); // 떠오르는 빛 알갱이
+  for (let i = 0; i < N; i++){ pos[i*3] = (Math.random()*2 - 1)*A; pos[i*3 + 1] = Math.random()*9; pos[i*3 + 2] = (Math.random()*2 - 1)*A; }
+  const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const motes = new THREE.Points(pg, new THREE.PointsMaterial({color:0xffe48a, size:.22, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending}));
+  motes.frustumCulled = false; scene.add(motes);
+  Object.assign(sanct, {on:true, onT:0, dome, motes, cx:tip.x, cz:tip.z});
+  sfx.clang(); sfx.holyBell(); shakeT = Math.max(shakeT, .25); hitStopT = Math.max(hitStopT, .06);
+  $('bossBar').classList.add('holy');
+  showNotice('성역: 기사가 피해를 받지 않고 회복해요 · 이동 속도↓ 점프 불가 패링 강도↓', 0xffd166);
+}
+function carveMarks(e){ // 표식을 새김 (하나씩 빛나며 나타남)
+  const geo = new THREE.PlaneGeometry(1, 1), Z = new THREE.Vector3(0, 0, 1);
+  markSpots(e).forEach((s, i) => {
+    const n = new THREE.Vector3(...s.n).normalize(), q = new THREE.Quaternion().setFromUnitVectors(Z, n);
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:sanctTex('mark'), transparent:true, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-4}));
+    const glow = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:sanctTex('mark'), color:0xffd36a, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending}));
+    for (const o of [m, glow]){ o.position.set(...s.pos); o.quaternion.copy(q); o.scale.setScalar(.001); s.bone.add(o); }
+    glow.position.addScaledVector(n, .005);
+    m.userData.e = e; m.userData.mark = i; e.parts.push(m); // 총알이 맞을 수 있게 (앞면만)
+    sanct.marks.push({name:s.name, m, glow, n, s:s.s, facing:!!s.facing, hp:KS.markHp, alive:true, born:-i*.14, flash:0});
+  });
+  geo.userData.shared = true; sanct.markGeo = geo;
+  sfx.holyBell();
+}
+function removeMark(mk){
+  const e = sanct.e, i = e.parts.indexOf(mk.m); if (i >= 0) e.parts.splice(i, 1);
+  for (const o of [mk.m, mk.glow]){ if (o.parent) o.parent.remove(o); o.material.dispose(); }
+}
+// 표식에 피해: 다 깎이면 깨지며 그로기 1 누적. 모두 깨거나 그로기가 꽉 차면 성역 해제
+function markHit(e, i, dmg){
+  if (!sanctOn() || sanct.e !== e) return false;
+  const mk = sanct.marks[i]; if (!mk || !mk.alive || mk.born < 1) return false;
+  mk.hp -= dmg; mk.flash = .12; sfx.clang();
+  const wp = mk.m.getWorldPosition(new THREE.Vector3()); sparkAt(wp);
+  if (mk.hp > 0) return true;
+  mk.alive = false; removeMark(mk);
+  for (let k = 0; k < 16; k++){ // 깨진 표식 조각
+    const b = new THREE.Mesh(new THREE.BoxGeometry(.1, .1, .02), new THREE.MeshBasicMaterial({color:k % 2 ? 0xffe48a : 0xfffbe8, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false}));
+    b.position.copy(wp); scene.add(b); bits.push({m:b, v:new THREE.Vector3((Math.random() - .5)*7, Math.random()*5 + 1, (Math.random() - .5)*7), life:.7});
+  }
+  sfx.holyCrack(); hitStopT = Math.max(hitStopT, .07); shakeT = Math.max(shakeT, .15);
+  e.poiseHits = Math.min(e.def.poise, e.poiseHits + 1); updatePoise(e);
+  const left = sanct.marks.filter(o => o.alive).length;
+  if (!left || e.poiseHits >= e.def.poise) sanctBreak(e);
+  else showNotice(`${mk.name}의 표식을 깨뜨렸어요 (남은 표식 ${left})`, 0xffd166);
+  return true;
+}
+function aimedMark(e){ // 근접 공격: 화면 가운데에서 가장 가까운 (보이는 쪽) 표식
+  const cam = camera.getWorldPosition(new THREE.Vector3()), fw = camera.getWorldDirection(new THREE.Vector3());
+  let best = -1, ba = KS.aim;
+  sanct.marks.forEach((mk, i) => {
+    if (!mk.alive || mk.born < 1) return;
+    const wp = mk.m.getWorldPosition(new THREE.Vector3()), v = wp.clone().sub(cam);
+    if (mk.facing){ const nw = mk.n.clone().transformDirection(mk.m.parent.matrixWorld); if (nw.x*-v.x + nw.z*-v.z <= 0) return; } // 몸통·등: 그쪽에 서야 함
+    const a = v.angleTo(fw); if (a < ba){ ba = a; best = i; }
+  });
+  return best;
+}
+const SANCT_NOHIT = {applied:false, dealt:0, shielded:false, heal:0, killed:false, kill:null};
+const SANCT_MELEE = ['slash', 'thrust', 'guardSlash', 'greatSlash', 'wave'];
+function sanctHit(e, base, kind){ // 성역 중: 몸은 피해 면역, 근접 공격은 노린 표식에
+  if (SANCT_MELEE.includes(kind)){ const i = aimedMark(e); if (i >= 0 && markHit(e, i, base*dmgMul())) return SANCT_NOHIT; }
+  if (kind !== 'burn'){ sfx.clang(); e.g.updateMatrixWorld(true); sparkAt(e.chest.localToWorld(new THREE.Vector3(0, .3, .3))); }
+  return SANCT_NOHIT;
+}
+function sanctBreak(e){ // 해제: 노란 기운이 깨져 무너져 내림, 기사는 주춤하며 물러남 (그로기가 꽉 찼으면 이어서 그로기)
+  if (!sanct || sanct.ending) return;
+  sanct.on = false; sanct.ending = true; sanct.endT = 0;
+  for (const mk of sanct.marks) if (mk.alive){ mk.alive = false; removeMark(mk); }
+  $('bossBar').classList.remove('holy');
+  const R = sanct.dome ? sanct.dome.scale.x : KS.dome, cx = sanct.cx ?? e.g.position.x, cz = sanct.cz ?? e.g.position.z;
+  if (sanct.dome){ scene.remove(sanct.dome); disposeFx(sanct.dome); sanct.dome = null; }
+  const tri = new THREE.BufferGeometry(); tri.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-.5, -.4, 0, .55, -.3, 0, -.05, .6, 0]), 3));
+  const mat = new THREE.MeshBasicMaterial({color:0xffe07a, transparent:true, opacity:.55, depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending});
+  const list = [];
+  for (let i = 0; i < 110; i++){ // 반구 면(가까운 것도 섞어)에 흩어진 조각
+    const r = i < 40 ? 12 + Math.random()*14 : R*(.55 + Math.random()*.45), th = Math.random()*Math.PI*2, ph = Math.acos(Math.random()*.92);
+    const m = new THREE.Mesh(tri, mat); m.position.set(cx + Math.sin(ph)*Math.cos(th)*r, Math.cos(ph)*r*.7 + 2, cz + Math.sin(ph)*Math.sin(th)*r);
+    const s = 1.2 + Math.random()*(r > 20 ? 4.5 : 2.2); m.scale.set(s, s*(.6 + Math.random()*.8), 1); m.rotation.set(Math.random()*6, Math.random()*6, Math.random()*6);
+    scene.add(m); list.push({m, v:new THREE.Vector3((Math.random() - .5)*2, -Math.random()*2, (Math.random() - .5)*2), w:new THREE.Vector3((Math.random() - .5)*4, (Math.random() - .5)*4, (Math.random() - .5)*4), delay:Math.random()*.35});
+  }
+  sanct.shards = {list, tri, mat};
+  sfx.holyShatter(); shakeT = Math.max(shakeT, .5); hitStopT = Math.max(hitStopT, .12);
+  $('sanctFx').classList.add('break');
+  showNotice('성역이 무너졌어요!', 0xffd166);
+  e.sanctCd = KS.cd; e.freezeT = 0; e.hitDone = false;
+  if (!(e.groggyT > 0) && e.state !== 'punish'){ e.state = 'sflinch'; e.st = 0; }
+}
+function clearSanct(){ // 즉시 정리 (새 판, 기사가 사라짐)
+  if (!sanct) return;
+  const S = sanct; sanct = null;
+  for (const mk of S.marks) if (mk.alive){ mk.alive = false; const i = S.e.parts.indexOf(mk.m); if (i >= 0) S.e.parts.splice(i, 1); for (const o of [mk.m, mk.glow]){ if (o.parent) o.parent.remove(o); o.material.dispose(); } }
+  if (S.markGeo) S.markGeo.dispose();
+  for (const o of [S.disc, S.dome, S.motes]) if (o){ scene.remove(o); o.geometry.dispose(); o.material.dispose(); }
+  if (S.shards){ for (const s of S.shards.list) scene.remove(s.m); S.shards.tri.dispose(); S.shards.mat.dispose(); }
+  scene.fog.color.setHex(SKY); scene.background.setHex(SKY);
+  $('bossBar').classList.remove('holy'); $('sanctFx').style.opacity = 0; $('sanctFx').classList.remove('break');
+}
+function updateSanct(dt){
+  const S = sanct, e = S.e;
+  if (!enemies.includes(e)){ clearSanct(); return; } // 기사가 사라짐
+  S.t += dt;
+  S.disc.scale.setScalar(Math.max(.01, KS.field*easeOut(Math.min(1, S.t/.4)))); S.disc.rotation.z += dt*.25;
+  if (S.on){
+    S.onT += dt;
+    const k = easeOut(Math.min(1, S.onT/KS.grow));
+    S.dome.scale.setScalar(Math.max(.01, KS.dome*k)); S.dome.material.opacity = .16 + .05*Math.sin(S.onT*2.4) + (1 - k)*.2;
+    S.fogK = Math.min(.5, S.fogK + dt*1.2);
+    S.motes.material.opacity = .85*k;
+    const mp = S.motes.geometry.attributes.position; for (let i = 0; i < mp.count; i++){ let y = mp.getY(i) + dt*(.8 + (i % 5)*.25); if (y > 9) y = 0; mp.setY(i, y); } mp.needsUpdate = true;
+    if (e.hp < e.maxHp){ e.hp = Math.min(e.maxHp, e.hp + KS.regen*dt); updateBossBar(e); } // 체력 지속 회복
+    if (!S.marks.length && S.onT >= KS.carve) carveMarks(e);
+    for (const mk of S.marks){ if (!mk.alive) continue; // 표식이 새겨지는 연출 + 맥박 + 맞으면 번쩍
+      mk.born += dt/.35; const b = clamp(mk.born, 0, 1), pulse = 1 + .08*Math.sin(S.onT*5 + mk.s*40);
+      mk.m.scale.setScalar(mk.s*Math.max(.001, easeOut(b))); mk.glow.scale.setScalar(mk.s*Math.max(.001, easeOut(b))*(1.5 + (1 - b)*2)*pulse);
+      mk.glow.material.opacity = b > 0 ? .55 + .3*Math.sin(S.onT*5) + (1 - b) : 0;
+      if (mk.flash > 0){ mk.flash -= dt; mk.m.material.color.setHex(0xffffff); mk.glow.material.opacity = 1; }
+      mk.m.material.color.setRGB(1, .7 + .3*mk.hp/KS.markHp, .45 + .55*mk.hp/KS.markHp); // 깎일수록 붉게
+    }
+    $('sanctFx').style.opacity = k;
+  } else if (S.ending){
+    S.endT += dt;
+    S.fogK = Math.max(0, S.fogK - dt*.6);
+    S.disc.material.opacity = Math.max(0, 1 - S.endT/.8);
+    if (S.motes){ S.motes.material.opacity = Math.max(0, .85 - S.endT); }
+    const L = S.shards.list;
+    for (const s of L){ if (S.endT < s.delay) continue; s.v.y -= 16*dt; s.m.position.addScaledVector(s.v, dt); s.m.rotation.x += s.w.x*dt; s.m.rotation.y += s.w.y*dt; s.m.rotation.z += s.w.z*dt; }
+    S.shards.mat.opacity = .55*Math.max(0, 1 - Math.max(0, S.endT - .9)/1.3);
+    $('sanctFx').style.opacity = Math.max(0, 1 - S.endT/.6);
+    if (S.endT >= 2.3){ clearSanct(); return; }
+  }
+  scene.fog.color.setHex(SKY).lerp(SANCT_Y, S.fogK); scene.background.copy(scene.fog.color);
+}
+function knightSanct(e, dt, p){ // 기사 쪽 동작: 발 구르기 → 칼끝 찍기 / 해제되며 주춤
+  const g = e.g, t = e.st;
+  if (e.state === 'sstomp'){
+    let b;
+    if (t < KS.stompUp) b = kbBlend(KB.stance, KB_STOMP_UP, easeOut(t/KS.stompUp));
+    else if (t < KS.stompHit) b = kbBlend(KB_STOMP_UP, KB_STOMP, easeIn((t - KS.stompUp)/(KS.stompHit - KS.stompUp)));
+    else b = kbBlend(KB_STOMP, KB.stance, easeIO(clamp((t - KS.stompHit - .2)/(KS.stomp - KS.stompHit - .2), 0, 1)));
+    knightBody(e, b, t < KS.stompHit ? kDamp(22, dt) : kDamp(16, dt));
+    knightHoldT(e, KH_STANCE(), 0);
+    if (!e.hitDone && t >= KS.stompHit){ e.hitDone = true; startSanct(e); }
+    if (t >= KS.stomp){ e.state = 'stap'; e.st = 0; e.hitDone = false; }
+  } else if (e.state === 'stap'){
+    let b, h;
+    if (t < KS.tapTurn){ const k = easeIO(t/KS.tapTurn); b = KB.stance; h = khBlend(KH_STANCE(), KH_TAPDN, k); }
+    else if (t < KS.tapRaise){ const k = easeIO((t - KS.tapTurn)/(KS.tapRaise - KS.tapTurn)); b = kbBlend(KB.stance, KB_TAPUP, k); h = khBlend(KH_TAPDN, KH_TAPUP, k); }
+    else if (t < KS.tapHit){ const k = easeIn((t - KS.tapRaise)/(KS.tapHit - KS.tapRaise)); b = kbBlend(KB_TAPUP, KB_TAP, k); h = khBlend(KH_TAPUP, KH_TAP, k); }
+    else { const k = easeIO(clamp((t - KS.tapHit - .3)/(KS.tap - KS.tapHit - .3), 0, 1)); b = kbBlend(KB_TAP, KB.stance, k); h = khBlend(KH_TAP, KH_STANCE(), k); }
+    knightBody(e, b, kDamp(16, dt)); knightHoldT(e, h, 0);
+    if (!e.hitDone && t >= KS.tapHit){ e.hitDone = true; g.updateMatrixWorld(true); sanctCover(e, e.kSword.localToWorld(new THREE.Vector3(0, -2.2, 0))); }
+    if (t >= KS.tap){ e.state = 'guard'; e.st = .8; e.atkCd = 1.6; }
+  } else if (e.state === 'sflinch'){
+    const k = Math.min(1, t/KS.flinch), mv = KS.flinchDist*(easeOut(k) - easeOut(Math.max(0, (t - dt)/KS.flinch)));
+    g.position.x = clamp(g.position.x - Math.sin(e.yaw)*mv, -A + 2, A - 2); g.position.z = clamp(g.position.z - Math.cos(e.yaw)*mv, -A + 2, A - 2);
+    BOSS_WORLD.collide(g.position, e.r);
+    if (g.position.y > 0) g.position.y = Math.max(0, g.position.y - dt*20);                  // 공중에서 깨졌으면 내려옴
+    const b = k < .3 ? kbBlend(KB.stance, KB_FLINCH, easeOut(k/.3)) : kbBlend(KB_FLINCH, KB.stance, easeIO((k - .3)/.7));
+    knightBody(e, b, kDamp(18, dt));
+    knightHoldT(e, khBlend(KH_STANCE(), KH_SAG, Math.sin(Math.min(1, k*1.4)*Math.PI)*.8), 0);
+    e.neck.rotation.x += Math.sin(k*Math.PI)*.2;
+    if (k >= 1){
+      if (e.poiseHits >= e.def.poise){ e.poiseHits = 0; e.groggyT = 4; e.state = 'stun'; e.st = 0; bossTeleg.visible = false; updatePoise(e); shakeT = Math.max(shakeT, .3); } // 그로기가 꽉 찼으면 그대로 그로기
+      else { e.state = 'guard'; e.st = .8; e.atkCd = 1.2; }
+    }
+  }
+  knightTrail(e, false, dt);
+}
 function knightPauldrons(e){ // 어깨 갑옷이 위팔 회전의 절반쯤을 따라감 (팔을 들어도 갑옷을 뚫지 않게)
   if (!e.kPaul) return;
   e.kPaul[0].quaternion.identity().slerp(e.armL.quaternion, .5);
   e.kPaul[1].quaternion.identity().slerp(e.armR.quaternion, .5);
 }
 function updateKnight(e, dt, p){
-  e.t += dt; e.st += dt;
+  e.t += dt; e.st += dt; if (e.sanctCd > 0) e.sanctCd -= dt;
   const g = e.g, P = KN_POSE, D = KN_DRAW, t = e.st;
   let d = Math.atan2(p.x - g.position.x, p.z - g.position.z) - e.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
-  const turn = e.state === 'intro' ? 1.5 : (e.state === 'guard' || e.state === 'windup' || e.state === 'backstep' || e.state === 'raise') ? 3 : 0; // 돌진·베기·내려찍기 중엔 방향을 각 단계가 정함
+  const turn = e.state === 'intro' ? 1.5 : (e.state === 'guard' || e.state === 'windup' || e.state === 'backstep' || e.state === 'raise' || e.state === 'sstomp') ? 3 : 0; // 칼을 꽂는 동안(stap)은 돌지 않음 // 돌진·베기·내려찍기 중엔 방향을 각 단계가 정함
   e.yaw += d*Math.min(1, dt*turn); g.rotation.y = e.yaw;                 // 플레이어 쪽으로 천천히 돌아섬
   e.rig.position.y = .9 - (e.drop || 0) - (e.kneeL.rotation.x + e.kneeR.rotation.x)*.02; // 무게중심 낮춤(drop) + 무릎을 굽히면 몸이 살짝 내려감
   const f = kDamp(14, dt);
@@ -3507,9 +3752,11 @@ function updateKnight(e, dt, p){
     const dist = Math.hypot(p.x - g.position.x, p.z - g.position.z);
     e.atkCd = (e.atkCd ?? 1.2) - dt;
     let mv = 0;
-    if (s2 >= 1 && e.atkCd <= 0 && dist > KC.far){ e.state = 'windup'; e.st = 0; }                         // 멀면: 칼을 왼쪽 어깨 뒤로 → 돌진 베기
-    else if (s2 >= 1 && e.atkCd <= 0 && dist < KG.close){ e.state = 'backstep'; e.st = 0; sfx.unsheath(); } // 가까우면: 물러나며 피하고 → 땅을 베어 충격파
-    else if (s2 >= 1 && e.atkCd <= 0){ e.state = 'x1wind'; e.st = 0; }                                    // 중간 거리: 내리치기 → 돌며 베기 → 도약 사선 베기
+    const sanctReady = !sanct && e.hp <= e.maxHp*KS.hpGate && !(e.sanctCd > 0);                          // 성역: 체력 70% 이하, 끝나고 35초 뒤 다시
+    if (s2 >= 1 && e.atkCd <= 0 && sanctReady){ e.state = 'sstomp'; e.st = 0; e.hitDone = false; }        // 발을 굴러 성역 → 칼끝을 찍어 경기장 전체로
+    else if (s2 >= 1 && e.atkCd <= 0 && dist > KC.far){ e.state = 'windup'; e.st = 0; }                     // 멀면: 칼을 왼쪽 어깨 뒤로 → 돌진 베기
+    else if (s2 >= 1 && e.atkCd <= 0 && Math.random() < .4){ e.state = 'backstep'; e.st = 0; sfx.unsheath(); } // 돌진 거리 안쪽 (같은 사거리): 40% 물러나며 피하고 → 땅을 베어 충격파
+    else if (s2 >= 1 && e.atkCd <= 0){ e.state = 'x1wind'; e.st = 0; }                                    //                            60% 내리치기 → 돌며 베기 → 도약 사선 베기
     else if (s2 >= 1 && dist > KC.near) mv = knightStep(e, dt, p, KC.walk);                                // 너무 멀지 않으면 천천히 다가섬
     if (s2 < 1) knightPose(e, P.point, P.stance, s2, f);                                                   // 가리키던 자세에서 기본 자세로
     else knightBody(e, knightWalkBody(e, mv, dt), kDamp(14, dt));                                     // 기본 자세 (걸으면 걷는 다리)
@@ -3518,6 +3765,7 @@ function updateKnight(e, dt, p){
   } else if (['backstep', 'raise', 'smash', 'stuck', 'pull'].includes(e.state)) knightClose(e, dt, p);
   else if (['x1wind', 'x1', 'x2', 'crouch', 'rise', 'hover', 'dive', 'xland'].includes(e.state)) knightCombo(e, dt, p);
   else if (e.state === 'punish') knightPunish(e, dt, p);
+  else if (['sstomp', 'stap', 'sflinch'].includes(e.state)) knightSanct(e, dt, p);
   else knightCharge(e, dt, p, f);
   knightPauldrons(e);
   updateBossBar(e);
@@ -3563,7 +3811,7 @@ function animateBoss(e, dt){
 function resetBoss(){
   if (droppedShield){ scene.remove(droppedShield); droppedShield = null; }
   rbullets.forEach(b => scene.remove(b.m)); rbullets.length = 0;
-  bossFx.forEach(f => scene.remove(f.m)); bossFx.length = 0; clearKnightWaves();
+  bossFx.forEach(f => scene.remove(f.m)); bossFx.length = 0; clearKnightWaves(); clearSanct();
   bossTeleg.visible = false; $('bossBar').classList.add('hide'); $('bossBar').classList.remove('enraged'); $('bossBar').querySelector('.bn').textContent = '철의 거인';
   slowT = 0; shakeT = 0; $('slowFx').style.opacity = 0;
 }
@@ -4063,7 +4311,7 @@ let parrySeq = 0; // 패리를 누를 때마다 1씩: 그 순간 패리 사거�
 let parryBuf = 0; // 패링 입력 예약: 쿨타임 중에 누르면 잠깐 기억했다가, 패링에 성공해 쿨타임이 풀리는 순간 바로 다시 패링
 // ---------- 지키는 자: 패링을 길게 누르면 가드 → 놓으면 막아낸 피해만큼 앞쪽 반원을 여러 번 벰 ----------
 let parryHeld = false, parryHoldT = 0, guarding = false, guardBlocked = 0, guardSlashQ = null;
-const effParryPow = () => (W.parryPow || 0) + ((sheathParry || !swordOut) ? (W.sheathPow || 0) : 0); // 납도 상태면 검집 보너스
+const effParryPow = () => ((W.parryPow || 0) + ((sheathParry || !swordOut) ? (W.sheathPow || 0) : 0))*(sanctOn() ? KS.parryMul : 1); // 납도 상태면 검집 보너스, 기사의 성역 중엔 약해짐
 function parryPress(){ if (punish) return; if (W.melee && W.guardian && state === 'play' && !paused && !itemUse && !exec && !skillPh){ parryHeld = true; parryHoldT = 0; } parry(); }
 let sheathPlant = false, greatRel = null, plantAnim = 1, plantFrom = null;
 const PLANT_RAISE = {x:.08, y:.38, z:-.32, rx:-.2, ry:0, rz:.05}; // 머리 위로 치켜든 자세 // 칼집째 꽂았는지, 대검 반격 진행 상태
@@ -4164,7 +4412,8 @@ function parrySuccess(e){
   if (e && e.groggyT > 0) return;
   if (e && e.boss){ // 보스: 그로기 강도만큼 패링해야 그로기
     e.poiseHits++;
-    if (e.poiseHits >= e.def.poise){
+    if (e.poiseHits >= e.def.poise && sanctOn() && sanct.e === e){ e.poiseHits = e.def.poise; sanctBreak(e); } // 성역 중에 그로기가 꽉 참: 성역이 깨지고 주춤한 뒤 그로기
+    else if (e.poiseHits >= e.def.poise){
       e.poiseHits = 0; e.groggyT = 4; bossTeleg.visible = false;
       if (e.type === 'knight'){ e.state = 'stun'; e.st = 0; } else setBossState(e, 'stun', 1); // 기사는 그로기가 끝나면 기본 자세로
       shakeT = Math.max(shakeT, .3);
@@ -4812,7 +5061,7 @@ function getMove(){
 }
 function jump(){
   if (planted()) return;
-  if (state!=='play' || !onGround || rollT>0 || exec || punish) return;
+  if (state!=='play' || !onGround || rollT>0 || exec || punish || sanctOn()) return; // 기사의 성역 중엔 점프 불가
   vy = 7.8; onGround = false; sfx.jump();
 }
 function roll(){
@@ -5802,7 +6051,7 @@ function update(dt){
     rollT -= dt;
     p.x += rollDir.x*13*dt; p.z += rollDir.z*13*dt;
   } else {
-    const sp = (scoped ? 3 : (W.spin && firing) ? 3.8 : 6) * (slowT > 0 ? .45 : 1) * (rageT > 0 ? 1 + .15*up.bloodRage : 1) * (exec || punish ? 0 : 1) * (skillPh === 'sheath' ? .35 : 1) * (W.moveMul || 1) * (itemUse && ITEMS[itemUse.k].slow ? ITEMS[itemUse.k].slow : 1) * (guarding ? (planted() ? 0 : .5) : 1);
+    const sp = (scoped ? 3 : (W.spin && firing) ? 3.8 : 6) * (slowT > 0 ? .45 : 1) * (rageT > 0 ? 1 + .15*up.bloodRage : 1) * (exec || punish ? 0 : 1) * (sanctOn() ? KS.slow : 1) * (skillPh === 'sheath' ? .35 : 1) * (W.moveMul || 1) * (itemUse && ITEMS[itemUse.k].slow ? ITEMS[itemUse.k].slow : 1) * (guarding ? (planted() ? 0 : .5) : 1);
     p.x += (mx*cy + mz*sy) * sp * dt;
     p.z += (-mx*sy + mz*cy) * sp * dt;
   }
@@ -5876,6 +6125,7 @@ function update(dt){
   if (swordHitT > 0){ swordHitT -= dt; if (swordHitT <= 0) doSwordHit(); }
   if (exec) updateExec(dt);
   if (punish) updatePunish(dt);
+  if (sanct) updateSanct(dt);
   if (skillPh) updateSkill(dt);
   if (gunSkill) updateGunSkill(dt);
   if (heli) updateHeli(dt);
