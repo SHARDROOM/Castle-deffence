@@ -158,3 +158,18 @@ test('15웨이브는 철의 거인 대신 왕국의 마지막 기사', () => {
   const notes = Waves.waveCommands(15, [], rng).filter(c => c.type === 'notice').map(c => c.text);
   assert.ok(notes.some(t => t.includes('왕국의 마지막 기사'))); assert.ok(!notes.some(t => t.includes('철의 거인')));
 });
+
+test('보스 전용(테스트 모드): 보스 웨이브만, 일반 적·비행선·도둑 없이 보스만', () => {
+  const d = Waves.create({ rng: () => 0 });
+  const spawns = cmds => cmds.filter(c => c.type === 'spawn' || c.type === 'airship').map(c => c.kind || c.type);
+  let cmds = d.start([], 12, { bossOnly: true });
+  assert.equal(d.wave, 15); assert.deepEqual(spawns(cmds), ['knight']); // 12 → 다음 보스 웨이브 15
+  assert.ok(cmds.some(c => c.type === 'waveBanner' && c.wave === 15));
+  assert.deepEqual(d.tick(500, []), []); // 도둑 없음
+  d.waveCleared(); cmds = d.tick(Waves.CLEAR_DELAY + .01, []);
+  assert.equal(d.wave, 20); assert.deepEqual(spawns(cmds), ['boss']); // 비행선(16웨이브부터)도 없음
+  d.start([], 10, { bossOnly: true }); assert.equal(d.wave, 10); // 보스 웨이브는 그대로
+  d.start([], 1, { bossOnly: true }); assert.equal(d.wave, 5);
+  d.start([], 3); assert.equal(d.wave, 3); assert.equal(d.bossOnly, false); // 옵션 없으면 평소대로
+  assert.ok(d.start([], 3).some(c => c.type === 'spawn' && c.kind !== 'boss'));
+});
