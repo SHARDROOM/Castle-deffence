@@ -236,7 +236,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · c9f460</div>
+<div id="buildVer" class="hud">v2026.11.05 · 5b822e</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3637,21 +3637,23 @@ function updateExec(dt){
     pitch += (Math.atan2(e.ch - p.y, Math.max(hd, .1)) - pitch)*Math.min(1, dt*18);
     execFace(x, e, dt); execPlace(x, e, dt);
   }
-  if (!x.thrust && x.t >= .22){
-    x.thrust = true; sfx.stab(); hitStopT = .06;
-    if (alive){ burst(e, 0xb0302a, 8); hitEnemy(e, 4, 'exec'); }
-  }
-  if (!x.slash && x.t >= .5){
-    x.slash = true; sfx.slashHit(); shakeT = Math.max(shakeT, .2);
+  // 일본도 처형: 왼쪽 위 → 오른쪽 아래로 벰, 오른쪽 위 → 왼쪽 아래로 벰, 마지막으로 검기처럼 머리 위에서 내리침
+  const K = KATANA_EXEC;
+  if (!x.cut1 && x.t >= K.cut1){ x.cut1 = true; sfx.swing(); sfx.slashHit(); hitStopT = .05; if (alive){ burst(e, 0xb0302a, 7); hitEnemy(e, 3, 'exec'); } }
+  if (!x.cut2 && x.t >= K.cut2){ x.cut2 = true; sfx.swing(); sfx.slashHit(); hitStopT = .05; if (enemies.includes(e)){ burst(e, 0xb0302a, 7); hitEnemy(e, 3, 'exec'); } }
+  if (!x.slash && x.t >= K.down){
+    x.slash = true; sfx.execSlash(); shakeT = Math.max(shakeT, .3); hitStopT = .08;
     const cx = e.g.position.x, cz = e.g.position.z;
-    if (enemies.includes(e)){ burst(e, 0xb0302a, 10); hitEnemy(e, 8, 'exec', undefined, true); }
+    if (enemies.includes(e)){ burst(e, 0xb0302a, 10); hitEnemy(e, 6, 'exec', undefined, true); }
     for (const o of enemies.slice()){
       if (o === e || !Combat.targetable(o, 'blunt') || Math.hypot(o.g.position.x - cx, o.g.position.z - cz) > 4 + o.r) continue;
       burst(o, 0xb0302a, 4); hitEnemy(o, 4, 'execSplash', p);
     }
   }
-  if (x.t >= .85){ if (enemies.includes(e)) e.groggyT = 0; exec = null; }
+  if (x.t >= K.end){ if (enemies.includes(e)) e.groggyT = 0; exec = null; }
 }
+const KATANA_EXEC = {cut1:.22, cut2:.46, down:.78, end:1.12}; // 각 베기가 맞는 순간
+const KX_TOP = {x:.08, y:.3, z:-.45, rx:.3, ry:0, rz:.05}, KX_BOT = {x:.05, y:-.5, z:-.7, rx:-2.3, ry:0, rz:-.1}; // 검기 스킬(발도)의 내리치기 자세
 // 1인칭 검 자세: 처형/휘두르기는 키프레임, 평소·패링은 부드럽게 따라감
 const SWC = {x:.34, y:-.44, z:-.6, q:new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.25, -.1, .2))};
 const ease = t => 1 - (1 - t)*(1 - t);
@@ -3734,10 +3736,18 @@ function animateSword(dt, dip){
     T = keyPose([[0, idle], [.12, L], [R.head, X], [.27, X], [.36, L], [R.chest, X], [.53, X],
                  [.66, W0], [R.legs - .03, S1], [R.legs + .04, S2], [.86, SE], [R.end, idle]], exec.t);
     snap = true;
-  } else if (exec){
-    const dx = exec.dx, dy = exec.dy, thr = {x:.16, y:-.22, z:-.85, rx:-1.42, ry:.12, rz:.1};
-    T = keyPose([[0, idle], [.12, {x:.24, y:-.28, z:-.38, rx:-1.4, ry:.15, rz:.1}], [.24, thr], [.4, thr],
-                 [.58, {x:.06 + dx*.5, y:-.16 + dy*.38, z:-.7, rx:-1.57 + dy*.7, ry:0, rz:-dx*.9}], [.85, idle]], exec.t);
+  } else if (exec){ // 일본도 처형: 대각선 두 번(↘, ↙) → 머리 위에서 내리침
+    const K = KATANA_EXEC, t = exec.t;
+    // s = 1: 왼쪽 위 → 오른쪽 아래, s = -1: 오른쪽 위 → 왼쪽 아래 (거울). 날은 베는 방향(아래 바깥쪽)을 향함
+    const D = (s, x, y, z, b, e) => poseDir(x*s, y, z, [b[0]*s, b[1], b[2]], [e[0]*s, e[1], e[2]]);
+    const up = s => D(s, -.34, .22, -.4, [-.55, .7, .45], [.6, -.6, -.5]);     // 어깨 너머로 치켜든 자세 (칼끝은 뒤쪽 위)
+    const mid = s => D(s, -.02, -.04, -.66, [.2, .35, -.92], [.7, -.7, 0]);   // 몸 앞을 비스듬히 지남
+    const low = s => D(s, .38, -.42, -.42, [.75, -.45, .5], [.4, -.5, .75]);  // 반대쪽 아래까지 흘림
+    const cut = (s, t0) => [[t0 - .1, up(s)], [t0 - .02, up(s)], [t0 + .02, mid(s)], [t0 + .08, low(s)]]; // t0 = 맞는 순간
+    if (t < K.down - .1)
+      T = keyPose([[0, idle], ...cut(1, K.cut1), ...cut(-1, K.cut2), [K.down - .22, KX_TOP], [K.down - .1, KX_TOP]], t);
+    else if (t < K.down + .08) T = lerpPose(KX_TOP, KX_BOT, ease(Math.max(0, t - (K.down - .1))/.18)); // 검기처럼 머리 위에서 땅까지 세로로
+    else T = keyPose([[K.down + .08, KX_BOT], [K.down + .2, KX_BOT], [K.end, idle]], t);
     snap = true;
   } else if (skillPh === 'sheath'){ // 납도: 칼을 왼쪽 허리로 거둬 칼집에 넣은 자세
     T = {x:-.22, y:-.52, z:-.32, rx:1.1, ry:0, rz:.7};
