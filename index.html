@@ -241,7 +241,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 6e02b0</div>
+<div id="buildVer" class="hud">v2026.11.05 · 71b8de</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -2856,10 +2856,10 @@ const KN_POSE = { // 각 뼈의 회전 [x, y, z] (오른팔 x가 음수면 앞�
           rig:[0, -.05, 0], thighL:[.15, 0, -.12], thighR:[-.15, 0, .12], kneeL:[.25, 0, 0], kneeR:[.2, 0, 0]},
   stance:{armR:[-1, 0, 0], foreR:[-1, 0, 0], armL:[-1, 0, 0], foreL:[-1, 0, 0], chest:[.05, -.05, 0], neck:[.05, .05, 0],         // 기본 자세: 두 손으로 칼자루를 잡고 칼끝은 앞·위로 (팔은 IK)
           rig:[0, -.05, 0], thighL:[.3, 0, -.06], thighR:[-.2, 0, .06], kneeL:[.35, 0, 0], kneeR:[.25, 0, 0]},
-  windup:{armR:[-1, 0, 0], foreR:[-1, 0, 0], armL:[-1, 0, 0], foreL:[-1, 0, 0], chest:[.12, .45, 0], neck:[.05, -.4, 0],          // 칼을 왼쪽 어깨에 올리고 웅크림 (몸을 왼쪽으로 틂)
-          rig:[0, .15, 0], thighL:[.45, 0, -.08], thighR:[-.4, 0, .08], kneeL:[.6, 0, 0], kneeR:[.45, 0, 0]},
-  dash:  {armR:[-1, 0, 0], foreR:[-1, 0, 0], armL:[-1, 0, 0], foreL:[-1, 0, 0], chest:[.3, -.35, 0], neck:[-.15, .3, 0],          // 앞으로 숙여 돌진하며 몸을 오른쪽으로 되틂
-          rig:[0, -.1, 0], thighL:[0, 0, 0], thighR:[0, 0, 0], kneeL:[.35, 0, 0], kneeR:[.35, 0, 0]},
+  windup:{armR:[-1, 0, 0], foreR:[-1, 0, 0], armL:[-1, 0, 0], foreL:[-1, 0, 0], chest:[.15, .2, 0], neck:[.05, -.2, 0],          // 칼을 왼쪽 어깨에 메고 웅크림 (몸은 살짝만 틂: 팔이 몸통을 뚫지 않게)
+          rig:[0, .1, 0], thighL:[.45, 0, -.08], thighR:[-.4, 0, .08], kneeL:[.6, 0, 0], kneeR:[.45, 0, 0]},
+  dash:  {armR:[-1, 0, 0], foreR:[-1, 0, 0], armL:[-1, 0, 0], foreL:[-1, 0, 0], chest:[.3, -.15, 0], neck:[-.25, .15, 0],         // 날아가듯 미끄러지는 돌진: 왼 무릎만 앞으로 내밀고 오른 다리는 뒤로 뻗음
+          rig:[0, -.05, 0], thighL:[-1.15, 0, -.05], thighR:[.55, 0, .05], kneeL:[1.35, 0, 0], kneeR:[.25, 0, 0]},
   point: {armR:[-1.5, 0, .1], foreR:[-.1, 0, 0], armL:[.1, 0, -.25], foreL:[-.35, 0, 0], chest:[0, -.25, 0], neck:[0, .2, 0],     // 한 손으로 칼을 눕힌 채 플레이어를 가리킴 (오른팔은 IK)
           rig:[0, -.1, 0], thighL:[.25, 0, -.08], thighR:[-.2, 0, .08], kneeL:[.3, 0, 0], kneeR:[.2, 0, 0]},
 };
@@ -2913,9 +2913,9 @@ const GRIP = new THREE.Vector3(0, -.42, 0);                                     
 // 칼이 닿을 거리면 왼쪽 위에서 오른쪽 아래로 크게 벰 → recover: 오른쪽 아래로 흘린 채 멈췄다가 기본 자세로
 const KC = {far:11, near:4.5, walk:1.3, windup:.85, dash:16, dashMax:1.1, reach:6.2, slash:.32, recover:.9, cd:3.2, dmg:32};
 const KH = { // 칼 쥔 곳·칼날 방향 (몸 기준, +z = 앞)
-  shoulder:{grip:new THREE.Vector3(-.28, 1.72, .12), dir:new THREE.Vector3(-.35, .75, -.55)},   // 왼쪽 어깨 위로 올려 멤 (칼끝은 뒤·위)
-  mid:     {grip:new THREE.Vector3(.02, 1.4, .8),    dir:new THREE.Vector3(.15, .25, 1)},       // 몸 앞을 비스듬히 지남 (정면)
-  low:     {grip:new THREE.Vector3(.48, .95, .5),    dir:new THREE.Vector3(.75, -.55, .35)},    // 오른쪽 아래로 흘림
+  shoulder:{grip:new THREE.Vector3(-.36, 1.62, .62), dir:new THREE.Vector3(-.6, .68, -.42)},   // 왼쪽 어깨 앞에서 칼을 어깨 위로 넘겨 멤 (손은 몸 앞, 칼끝은 왼쪽 뒤·위)
+  mid:     {grip:new THREE.Vector3(.0, 1.38, .9),    dir:new THREE.Vector3(.15, .25, 1)},       // 몸 앞을 비스듬히 지남 (정면)
+  low:     {grip:new THREE.Vector3(.5, 1.0, .7),     dir:new THREE.Vector3(.75, -.55, .35)},    // 오른쪽 아래로 흘림 (손은 배 앞)
 };
 const KH_STANCE = () => ({grip:KN_STANCE_GRIP.clone(), dir:new THREE.Vector3(0, Math.sin(KN_STANCE_UP), Math.cos(KN_STANCE_UP))});
 function khBlend(a, b, k){ // 두 쥔 자세 사이: 쥔 곳은 직선, 칼날 방향은 구면 보간
@@ -2949,8 +2949,8 @@ function knightCharge(e, dt, p, f){
     const mv = Math.min(sp*dt, Math.max(0, dist - (e.r + 3)));                              // 덩치가 커서 플레이어 몇 걸음 앞에서 멈춤
     g.position.x = clamp(g.position.x + Math.sin(e.yaw)*mv, -A + 2, A - 2); g.position.z = clamp(g.position.z + Math.cos(e.yaw)*mv, -A + 2, A - 2);
     e.chargeDir.set(Math.sin(e.yaw), 0, Math.cos(e.yaw)); BOSS_WORLD.breakCharge(e); BOSS_WORLD.collide(g.position, e.r); // 앞을 막는 소품은 부수고, 성벽·탑엔 막힘
-    e.walk = (e.walk || 0) + mv*1.6; const sw = Math.sin(e.walk)*.7;
-    knightPose(e, P.windup, P.dash, smooth(Math.min(1, t/.15)), f); e.thighL.rotation.x += sw; e.thighR.rotation.x -= sw;
+    knightPose(e, P.windup, P.dash, smooth(Math.min(1, t/.15)), f);                          // 다리는 걷지 않고 무릎을 내민 채 그대로
+    e.rig.position.y += .12*Math.min(1, t/.15)*(slashing ? Math.max(0, 1 - e.slashT/KC.slash) : 1); // 땅에서 살짝 떠서 미끄러짐
     if (!slashing && (dist <= KC.reach || t >= KC.dashMax)){ e.slashT = 0; sfx.bossSwing(.6); }   // 칼이 닿을 거리면 벰
     if (slashing){
       e.slashT += dt; const k = Math.min(1, e.slashT/KC.slash), kw = k*k*(3 - 2*k);
