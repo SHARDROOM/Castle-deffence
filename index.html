@@ -236,7 +236,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 060db9</div>
+<div id="buildVer" class="hud">v2026.11.05 · 3dce8c</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -2813,7 +2813,7 @@ function resetSword(){
   sheathT = 0; swordOut = false; drawT = 0; pendingSwing = false; greatRel = null; sheathPlant = false; guarding = false; parryHeld = false; guardSlashQ = null; guardBlocked = 0;
   swingT = 0; swordHitT = 0; parryT = 0; parryCd = 0; exec = null; rageT = 0; hitStopT = 0;
   parryBuf = 0; parrySeq = 0; parryHoldT = 0;
-  rapierClock = 0; rapierHeld = false; rapierHoldT = 0; rapierLastPress = -9; rapierSlashes = 0; thrust = null; thrustFrom = null; deflectOwn = false; rapierFlickT = 0; // 레이피어
+  rapierClock = 0; rapierHeld = false; rapierHoldT = 0; rapierLastPress = -9; rapierFreePress = false; rapierSlashes = 0; thrust = null; thrustFrom = null; deflectOwn = false; rapierFlickT = 0; // 레이피어
   parryHealed = false; parryHit = false; knockT = 0; sheathParry = false; swordIdleT = 0; // 패리 입력 예약·튕겨남 자세
   slashes.forEach(sl => camera.remove(sl.m)); slashes.length = 0;
 }
@@ -3205,7 +3205,7 @@ function doSwordHit(trailAng, mul = 1){ // mul: 발도 공격 등 피해 배수
 // 정밀 흘리기: 공격 버튼을 한 번 누르면 패링 유예만큼 흘리기 창이 열림 (판정은 패링과 같음).
 // 연타(직전 누름에서 0.35초 안)나 누르고 있기(0.2초 이상)로는 열리지 않고, 시도할 때마다 패링 쿨타임이 돎.
 const RAPIER_HOLD = .2, RAPIER_MASH = .35, THRUST_DUR = .6;
-let rapierClock = 0, rapierHeld = false, rapierHoldT = 0, rapierLastPress = -9, rapierSlashes = 0, thrust = null, deflectOwn = false, rapierFlickT = 0;
+let rapierClock = 0, rapierHeld = false, rapierHoldT = 0, rapierLastPress = -9, rapierFreePress = false, rapierSlashes = 0, thrust = null, deflectOwn = false, rapierFlickT = 0;
 function markParryProjectiles(){ // 누른 순간 패리 사거리 안에 있던 화살·반사탄만 받아낼 수 있음
   parrySeq++; const pp = yawObj.position, pr = W.parryRange || 99;
   for (const s of shots) if (!s.ret && !s.stuck && s.m.position.distanceTo(pp) <= pr) s.parryWin = parrySeq;
@@ -3255,7 +3255,7 @@ function rapierTick(dt){ // 레이피어 입력 (매 프레임)
   if (rapierFlickT > 0) rapierFlickT -= dt;
   if (firing && !rapierHeld){ // 누른 순간: 베기, 그리고 연타가 아니면 흘리기 창
     rapierHeld = true; rapierHoldT = 0;
-    const mash = rapierClock - rapierLastPress < RAPIER_MASH; rapierLastPress = rapierClock;
+    const mash = !rapierFreePress && rapierClock - rapierLastPress < RAPIER_MASH; rapierLastPress = rapierClock; rapierFreePress = false; // 흘리기 성공 직후의 누름은 연타가 아님
     if (!thrust){ const was = fireCd; swordAttack(); if (fireCd > was) rapierSlashes = 1; }
     if (!mash && parryCd <= 0 && !itemUse && !exec && !skillPh && !(rollT > 0)) openDeflect();
   } else if (!firing && rapierHeld){ rapierHeld = false; rapierSlashes = 0; }
@@ -3399,7 +3399,7 @@ function parrySuccess(e){
   } else if (e){ // 일반 병사는 바로 그로기
     e.groggyT = 2.5; e.aimT = 0; e.recoverT = 0; e.atkPh = 0; e.shoot = Math.max(e.shoot, 1.5);
   }
-  parryHit = true; if (W.rapier){ rapierFlickT = .22; deflectOwn = false; } else { parryCd = 0; knockT = KNOCK_DUR; } // 레이피어: 쿨타임 유지, 날로 빗겨 쳐냄
+  parryHit = true; if (W.rapier){ rapierFlickT = .22; deflectOwn = false; parryCd = 0; rapierFreePress = true; } else { parryCd = 0; knockT = KNOCK_DUR; } // 레이피어: 날로 빗겨 쳐냄, 쿨타임 초기화 + 다음 누름은 연타로 치지 않음 (바로 다시 흘리기 가능)
   knockSide = parryVar.dx < 0 ? -1 : parryVar.dx > 0 ? 1 : (Math.random() < .5 ? -1 : 1); sfx.parry(); parrySparks(); shakeT = Math.max(shakeT, .16); // 패링: 화면 살짝 흔들림 + 불꽃 // 패링 성공 시 쿨타임 즉시 초기화
   hitStopT = .1; slashFx(0, 0, .02, 1.6, true); // 패링 섬광은 흰색 유지
   if (up.calm && !parryHealed){ parryHealed = true; hp = Math.min(maxHp(), hp + 6*up.calm); updateHUD(); } // 평정심
