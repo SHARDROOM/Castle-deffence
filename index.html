@@ -236,7 +236,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 30aaed</div>
+<div id="buildVer" class="hud">v2026.11.05 · 276ee3</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3427,11 +3427,22 @@ function groggyPose(e, dt){
 function startExec(e){
   drawSword(true); exec = {e, t:0, dx: Math.random() < .5 ? -1 : 1, dy: Math.random() < .5 ? -1 : 1, thrust:false, slash:false};
   e.groggyT = Math.max(e.groggyT, 1); firing = false;
-  if (e.boss){ // 보스 전용 처형: 거인 정면 기준으로 위치를 잡음
-    const p = yawObj.position, dx = p.x - e.g.position.x, dz = p.z - e.g.position.z, d = Math.hypot(dx, dz) || 1;
-    Object.assign(exec, {boss:true, fx:dx/d, fz:dz/d, d0:d, y:0, ev:0, rapier: !!W.rapier});
+  // 모든 처형은 같은 방향·거리에서: 적은 플레이어 쪽으로 몸을 돌리고, 플레이어는 적 정면의 정해진 거리로 옮겨 감
+  const p = yawObj.position, dx = p.x - e.g.position.x, dz = p.z - e.g.position.z, d = Math.hypot(dx, dz) || 1;
+  Object.assign(exec, {fx:dx/d, fz:dz/d, d0:d});
+  if (e.boss){ // 보스 전용 처형
+    Object.assign(exec, {boss:true, y:0, ev:0, rapier: !!W.rapier});
     e.react = 'pre'; e.reactT = 0;
   } else if (W.rapier) exec.rapier = true; // 레이피어: 머리 → 가슴 찌르고 다리 베기
+}
+const EXEC_GAP = 1.3; // 일반 처형: 적 몸 바깥에서 이만큼 떨어져 섬
+function execFace(x, e, dt){ // 처형당하는 적이 플레이어 쪽(시작할 때의 방향)을 정면으로 바라보게
+  let d = Math.atan2(x.fx, x.fz) - e.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+  e.yaw += d*Math.min(1, dt*14); e.g.rotation.y = e.yaw;
+}
+function execPlace(x, e, dt){ // 일반 처형: 플레이어를 적 정면 정해진 거리로 (처음 0.2초에 걸쳐 미끄러져 감)
+  const p = yawObj.position, gap = e.r + EXEC_GAP, k = x.t < .2 ? Math.min(1, dt*14) : 1;
+  p.x += (e.g.position.x + x.fx*gap - p.x)*k; p.z += (e.g.position.z + x.fz*gap - p.z)*k; collide(p, .45, footY);
 }
 // ---------- 보스 처형: 무릎을 밟고 뛰어올라 투구 틈에 꽂고, 비틀고, 내려오며 벰 (약 2.2초) ----------
 // ---------- 레이피어 보스 처형: 땅에 선 채로 거인의 몸통을 올려다보며, 양 어깨 → (숨 고르기) → 목 아래·몸통 아래를 찌르고,
@@ -3458,7 +3469,7 @@ function updateRapierBossExec(dt){
   if (t < .45) dist = lerp(x.d0, 3.1, ease(t/.45));                                             // 달려듦
   else if (t < RB.vSlash + .12) dist = 3.1;                                                    // 그 자리에서 찌르고 벰
   else dist = lerp(3.1, 3.5, ease(Math.min(1, (t - RB.vSlash - .12)/(RB.land - RB.vSlash - .12)))); // 한 걸음 물러남
-  p.x = bx + x.fx*dist; p.z = bz + x.fz*dist;
+  p.x = bx + x.fx*dist; p.z = bz + x.fz*dist; if (alive) execFace(x, e, dt);
   const eye = x.y + 1.6, lookY = t < RB.vSlash + .12 ? torsoY : 1.1*S;
   let d = Math.atan2(-(bx - p.x), -(bz - p.z)) - yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
   yaw += d*Math.min(1, dt*20);
@@ -3501,7 +3512,7 @@ function updateBossExec(dt){
   else if (t < 1.35){ dist = 1.35; x.y = headY - 1.7; }                                                   // 투구에 매달림
   else if (t < 1.85){ const k = (t - 1.35)/.5; dist = lerp(1.35, 2.8, k); x.y = lerp(headY - 1.7, 0, k*k); } // 베면서 내려옴
   else { dist = 2.8; x.y = 0; }
-  p.x = bx + x.fx*dist; p.z = bz + x.fz*dist;
+  p.x = bx + x.fx*dist; p.z = bz + x.fz*dist; if (alive) execFace(x, e, dt);
   const lookY = t < 1.4 ? headY : 1.1*S, eye = x.y + 1.6;
   let d = Math.atan2(-(bx - p.x), -(bz - p.z)) - yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
   yaw += d*Math.min(1, dt*20);
@@ -3593,7 +3604,7 @@ function updateRapierExec(dt){
     yaw += d*Math.min(1, dt*18);
     const ty = 1.78*e.def.scale*rapierExecLook(x.t); // 찌를 곳·벨 곳으로 시선을 옮김
     pitch += (Math.atan2(ty - p.y, Math.max(hd, .1)) - pitch)*Math.min(1, dt*14);
-    if (x.t < .15 && hd > e.r + 1.3){ const k = Math.min(1, dt*12); p.x += (ex - p.x)/hd*(hd - e.r - 1.3)*k; p.z += (ez - p.z)/hd*(hd - e.r - 1.3)*k; collide(p, .45, footY); }
+    execFace(x, e, dt); execPlace(x, e, dt);
   }
   if (!x.head && x.t >= R.head){ // 머리 찌르기
     x.head = true; sfx.stab(); hitStopT = .05; shakeT = Math.max(shakeT, .06);
@@ -3624,7 +3635,7 @@ function updateExec(dt){
     let d = Math.atan2(-(ex - p.x), -(ez - p.z)) - yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
     yaw += d*Math.min(1, dt*18);
     pitch += (Math.atan2(e.ch - p.y, Math.max(hd, .1)) - pitch)*Math.min(1, dt*18);
-    if (x.t < .15 && hd > e.r + 1.3){ const k = Math.min(1, dt*12); p.x += (ex - p.x)/hd*(hd - e.r - 1.3)*k; p.z += (ez - p.z)/hd*(hd - e.r - 1.3)*k; collide(p, .45, footY); }
+    execFace(x, e, dt); execPlace(x, e, dt);
   }
   if (!x.thrust && x.t >= .22){
     x.thrust = true; sfx.stab(); hitStopT = .06;
