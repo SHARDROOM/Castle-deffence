@@ -241,7 +241,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 5b6399</div>
+<div id="buildVer" class="hud">v2026.11.05 · b7719a</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -1827,8 +1827,8 @@ const ETYPES = {
   thief: {name:'도둑',     color:0x5a4a32, pants:0x3a2e22, scale:0.82, hp:w=>6+w, speed:w=>6.2, shoots:false, melee:0, score:300, xp:4, thief:true},
   banner:{name:'기수',     color:0x2f4f8a, pants:0x2b2a3a, scale:1.05, hp:w=>5+Math.floor(w/2), speed:w=>2.4+Math.min(w*0.1,1),  shoots:false, melee:20, score:180, xp:6},
   dodger:{name:'암살자',   color:0x3a2e4a, pants:0x2b2230, scale:0.95, hp:w=>3+Math.floor(w/3), speed:w=>2.8+Math.min(w*0.2,1.5),  shoots:true,  melee:28, score:150, dodges:true, xp:4},
-  // 15웨이브 보스 (지금은 모델만, 아직 웨이브에 나오지 않음): 체력 600, 그로기 수치 7
-  knight:{name:'왕국의 마지막 기사', color:0xd4a640, pants:0xb88a2e, scale:2.7, hp:w=>600, speed:w=>1.9, shoots:false, melee:0, score:3000, xp:60, boss:true, poise:7},
+  // 15웨이브 보스: 체력 1000, 그로기 수치 7
+  knight:{name:'왕국의 마지막 기사', color:0xd4a640, pants:0xb88a2e, scale:2.7, hp:w=>1000, speed:w=>1.9, shoots:false, melee:0, score:3000, xp:60, boss:true, poise:7},
   boss:  {name:'철의 거인', color:0x58616d, pants:0x3c434d, scale:2.2, hp:w=>Math.round(220*(1+0.6*(Math.max(1, Math.floor(w/5))-1))), speed:w=>1.8, shoots:false, melee:0, score:1500, xp:30, boss:true, poise:6} // poise = 그로기 강도: 이만큼 패링하면 그로기
 };
 const SG = { // 옛날 상자 모델 (팔다리는 아래에서 스키닝으로 휘어지는 한 덩어리)
