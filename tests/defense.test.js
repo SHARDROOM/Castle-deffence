@@ -173,3 +173,20 @@ test('피격 방향: yaw 0이면 −z가 앞, +x가 오른쪽', () => {
   const d = Defense.hitDirection({ x: 0, z: -5 }, P, Math.PI / 2); // 왼쪽으로 90도 돌면 원래 앞은 오른쪽
   close(d.right, 1); close(d.top, 0);
 });
+
+// ---------- 패리 깨짐 (breakPow) ----------
+test('패리 강도가 breakPow보다 낮으면 패리가 깨지고 피해를 그대로 받는다', () => {
+  const r = Defense.resolve(atk('bossMelee', { breakPow: 130 }), def(Object.assign({ parryPow: 100 }, PARRY)));
+  assert.equal(r.outcome, 'parryBroken'); assert.equal(r.parryBroken, true); assert.equal(r.parried, false);
+  assert.equal(r.landed, true); close(r.damage, 10); assert.equal(r.parryTarget, null);
+});
+
+test('패리 강도가 breakPow 이상이면 평소처럼 패리', () => {
+  const r = Defense.resolve(atk('bossMelee', { breakPow: 130 }), def(Object.assign({ parryPow: 160 }, PARRY)));
+  assert.equal(r.outcome, 'parried'); assert.equal(r.parryBroken, false); assert.equal(r.landed, false);
+});
+
+test('breakPow가 있어도 구르기·가드는 그대로', () => {
+  assert.equal(Defense.resolve(atk('bossMelee', { breakPow: 999 }), def(Object.assign({ parryPow: 0 }, ROLL, PARRY))).outcome, 'dodged');
+  assert.equal(Defense.resolve(atk('bossMelee', { breakPow: 999 }), def(Object.assign({ parryPow: 0 }, GUARD))).outcome, 'guarded');
+});
