@@ -246,7 +246,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 9dc754</div>
+<div id="buildVer" class="hud">v2026.11.05 · 4fa8ca</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3130,7 +3130,7 @@ function knightCharge(e, dt, p, f){
 // backstep: 뒤로 크게 뛰어 물러남 (이 동안 공격이 닿지 않음) → raise: 칼을 오른쪽 어깨 위로 끌어올리며 몸을 오른쪽으로 감아 힘을 모음 →
 // smash: 골반 → 어깨 → 칼 순서로 풀며 앞쪽 땅을 비스듬히 베어 지나감 (칼이 땅에 닿는 순간 부채꼴 충격파) →
 // stuck: 멈추지 않고 왼쪽 아래까지 관성으로 흘림 → pull: 무게중심을 되찾으며 기본 자세로
-const KG = {close:7, back:.45, backDist:5.5, raise:.55, smash:.24, impact:.5, stuck:.3, hold:.6, pull:.8, cd:3.4, // hold: 칼이 땅에 걸린 채 버티는 후딜
+const KG = {close:7, back:.45, backDist:5.5, raise:.55, smash:.24, impact:.5, stuck:.3, hold:1.0, pull:.6, cd:3.4, // hold: 성역 중에만 칼이 땅에 걸린 채 버티는 후딜
             wave:{speed:22, len:24, half:.52, dmg:26, linger:2.6}}; // half: 부채꼴 반각(±30°), linger: 다 퍼진 뒤 갈라진 땅이 남는 시간
 const KH_G = { // 몸통 기준 칼 쥔 자세 (몸통이 돈 만큼 함께 돌림)
   over:  {grip:new THREE.Vector3(.36, 2.0, .2),  dir:new THREE.Vector3(.5, .62, -.6)},     // 오른쪽 어깨 위로 끌어올림 (칼끝은 뒤·위)
@@ -3288,7 +3288,7 @@ function knightClose(e, dt, p){
 // hover: 잠깐 떠서 플레이어를 내려다봄 → dive: 몸 전체를 앞으로 기울여 사선으로 플레이어에게 떨어지며 사선으로 베어 착지
 // (착지 일격은 패리 강도가 KX.breakPow보다 낮으면 패리가 깨짐) → xland: 착지 충격을 받아내며 일어나 기본 자세로
 const KX = {wind:.42, slash:.28, spin:.62, crouch:.3, rise:.62, hover:.42, dive:.42, land:.8, cd:4.6, end:.75, cd1:2.4, cd2:3.2, // end: 짧은 변형(1·2타에서 끝)의 마무리, cd1·cd2: 그 뒤 쉬는 시간
-            h:12, reach:6.4, dmg1:22, dmg2:22, dmg3:34, breakPow:130, behind:2, hold:.55}; // behind: 착지점은 플레이어 시점 뒤쪽을 노림, hold: 착지 후 웅크린 채 버티는 후딜
+            h:12, reach:6.4, dmg1:22, dmg2:22, dmg3:34, breakPow:130, behind:2, hold:.9}; // behind: 착지점은 플레이어 시점 뒤쪽을 노림, hold: 성역 중에만 착지 후 웅크린 채 버티는 후딜
 const KX_TMP = new THREE.Vector3();
 const KH_X = {
   spinOut:{grip:new THREE.Vector3(.48, 1.32, .58), dir:new THREE.Vector3(.95, -.05, .3)},   // 수평으로 오른쪽 바깥으로 뻗은 칼 (돌며 휩씀)
@@ -3322,7 +3322,7 @@ function knightLandPoint(e, p, out){ // 도약 착지점: 플레이어 시점 �
   if (Math.hypot(x - p.x, z - p.z) < min){ x = p.x - px/pd*min; z = p.z - pz/pd*min; }      // 너무 가까우면 플레이어 바로 앞으로
   return out.set(clamp(x, -A + 2, A - 2), 0, clamp(z, -A + 2, A - 2));
 }
-const kRecover = e => sanct && sanct.on && sanct.e === e ? 1.7 : 1; // 성역 중엔 공격 뒤 후딜이 더 길게 (표식을 노릴 틈)
+const kRecover = e => sanct && sanct.on && sanct.e === e ? 1 : 0; // 후딜(hold)은 성역이 켜져 있는 동안에만 (표식을 노릴 틈)
 function knightCombo(e, dt, p){
   const g = e.g;
   if (e.freezeT > 0){ e.freezeT -= dt; e.st -= dt; return; }
@@ -3396,7 +3396,7 @@ function knightCombo(e, dt, p){
       if (e.state !== 'punish'){ e.state = 'xland'; e.st = 0; e.holdT = KX.hold*kRecover(e); }
     }
   } else if (e.state === 'xland'){ // ⑦ 착지 충격을 받아내며 일어나 기본 자세로
-    const H = e.holdT ?? KX.hold, k = easeIO(clamp((t - H)/KX.land, 0, 1));                 // 후딜: 착지한 자세로 버티다가 일어남
+    const H = e.holdT ?? 0, k = easeIO(clamp((t - H)/KX.land, 0, 1));                 // 후딜: 착지한 자세로 버티다가 일어남
     const bl = kbBlend(KB_X.land, KB.stance, k); bl.ct += Math.sin(Math.min(1, t/Math.max(H, .01))*Math.PI)*.06; // 버티며 숨을 고름
     knightBody(e, bl, kDamp(14, dt));
     knightHoldT(e, khBlend(KH_G.past, KH_STANCE(), k), bodyYaw(e)*(1 - k));
