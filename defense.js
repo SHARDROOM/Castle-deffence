@@ -45,7 +45,7 @@
   }
 
   const result = (o) => Object.assign({
-    outcome: 'hit', damage: 0, landed: false, parried: false, parryTarget: null,
+    outcome: 'hit', damage: 0, landed: false, parried: false, parryTarget: null, parryBroken: false,
     guardBlocked: 0, returnProjectile: false, showDodge: false, resistDebuff: false,
   }, o);
 
@@ -74,6 +74,8 @@
     n = adren(n, d);
     if (d.parryT > 0 && parryable) {
       if (inParryRange(attack, d, p)) { // 패리 사거리 안의 공격만 받아냄
+        // 패리 강도가 attack.breakPow보다 낮으면 패리가 깨짐: 받아내지 못하고 피해를 그대로 받음 (적은 비틀거리지 않음)
+        if (attack.breakPow && (d.parryPow || 0) < attack.breakPow) return result(Object.assign({ outcome: 'parryBroken', parryBroken: true, damage: n, landed: true }, extra));
         const parried = { outcome: 'parried', parried: true, parryTarget: attack.src || null };
         if (!attack.pow || d.parryPow >= attack.pow) return result(Object.assign(parried, extra));
         // 패리 강도가 모자라면 패리는 되지만 피해 일부(60%)가 들어옴
@@ -84,14 +86,15 @@
   }
 
   // 공격 하나를 판정한다.
-  //   attack:   {dmg, kind, from?: {x, z}, src?, srcR?, dist?, pow?, canReturn?, inParryRange?}
+  //   attack:   {dmg, kind, from?: {x, z}, src?, srcR?, dist?, pow?, breakPow?, canReturn?, inParryRange?}
+  //             breakPow = 패리 강도가 이보다 낮으면 패리가 깨짐 (outcome 'parryBroken', 피해 그대로)
   //             src = 패리 성공 시 비틀거릴 적, srcR = 그 적의 반지름,
   //             dist = 미리 잰 거리 (없으면 from으로 계산), canReturn = 반사탄을 되돌릴 보스가 있는가,
   //             inParryRange = (투사체) 패리를 누른 순간 패리 사거리 안에 있었는가
   //   defender: {x, z, rollT, inExec, adrenT, guarding, guardResist, parryT, parryRange, parryPow}
   //             guardResist = 가드하면 넉백·둔화를 버티는 조합인가 (지키는 자 + 대검)
-  //   반환:     {outcome: 'dodged'|'immune'|'parried'|'guarded'|'hit', damage, landed, fx,
-  //             parried, parryTarget, guardBlocked, returnProjectile, showDodge, resistDebuff}
+  //   반환:     {outcome: 'dodged'|'immune'|'parried'|'parryBroken'|'guarded'|'hit', damage, landed, fx,
+  //             parried, parryTarget, parryBroken, guardBlocked, returnProjectile, showDodge, resistDebuff}
   //             landed = 실제로 피해가 들어갔는가 (보스 넉백·둔화 조건)
   //             resistDebuff = 맞았지만 넉백·둔화는 걸지 않음
   function resolve(attack, d) {
