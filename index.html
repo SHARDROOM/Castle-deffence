@@ -236,7 +236,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · f759c4</div>
+<div id="buildVer" class="hud">v2026.11.05 · 30aaed</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3437,7 +3437,8 @@ function startExec(e){
 // ---------- 레이피어 보스 처형: 땅에 선 채로 거인의 몸통을 올려다보며, 양 어깨 → (숨 고르기) → 목 아래·몸통 아래를 찌르고,
 //            두 어깨를 잇는 가로 베기, 목 아래와 몸통 아래를 잇는 세로 베기로 십자를 새김 (약 2.6초) ----------
 // 찌를 곳은 거인의 실제 뼈 위치(양 어깨, 목, 엉덩이)에서 매 프레임 구함. 시간은 각 동작이 맞는 순간.
-const RB = {ls:.7, rs:.82, neck:1.3, low:1.42, hSlash:1.64, vSlash:1.92, land:2.3, end:2.6};
+const RB = {ls:.7, rs:.82, neck:1.3, low:1.42, hSlash:1.68, vSlash:2.12, land:2.5, end:2.8};
+const RB_H0 = RB.hSlash - .185, RB_H1 = RB_H0 + .36; // 가로 베기(일본도 평타) 구간: 휘두르는 호의 한가운데가 hSlash
 const RB_DEF = {ls:{x:-.3, y:.2}, rs:{x:.3, y:.2}, neck:{x:0, y:.25}, low:{x:0, y:-.25}}; // 뼈를 못 읽을 때
 function rbTargets(e){ // 몸통 위 네 곳: 세계 좌표(w)와 화면 기준 방향(a: 조준점에서 x·y, 시선 거리 1 기준)
   const W_ = k => e[k].getWorldPosition(new THREE.Vector3());
@@ -3455,10 +3456,10 @@ function updateRapierBossExec(dt){
   x.t += dt; const t = x.t, S = e.def.scale, torsoY = 1.13*S, bx = e.g.position.x, bz = e.g.position.z;
   let dist; x.y = 0; // 도약 없이 땅에서
   if (t < .45) dist = lerp(x.d0, 3.1, ease(t/.45));                                             // 달려듦
-  else if (t < 2.02) dist = 3.1;                                                               // 그 자리에서 찌르고 벰
-  else dist = lerp(3.1, 3.5, ease(Math.min(1, (t - 2.02)/(RB.land - 2.02))));                  // 한 걸음 물러남
+  else if (t < RB.vSlash + .12) dist = 3.1;                                                    // 그 자리에서 찌르고 벰
+  else dist = lerp(3.1, 3.5, ease(Math.min(1, (t - RB.vSlash - .12)/(RB.land - RB.vSlash - .12)))); // 한 걸음 물러남
   p.x = bx + x.fx*dist; p.z = bz + x.fz*dist;
-  const eye = x.y + 1.6, lookY = t < 2.02 ? torsoY : 1.1*S;
+  const eye = x.y + 1.6, lookY = t < RB.vSlash + .12 ? torsoY : 1.1*S;
   let d = Math.atan2(-(bx - p.x), -(bz - p.z)) - yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
   yaw += d*Math.min(1, dt*20);
   pitch += (Math.atan2(lookY - eye, dist) - pitch)*Math.min(1, dt*14);
@@ -3681,15 +3682,26 @@ function animateSword(dt, dip){
     };
     const at = (aim, hx, hy, hz, edge) => poseDir(hx, hy, hz, tipTo(aim, hx, hy, hz), edge || [0, 1, 0]);
     const L = a => at(a, -.26 + a.x*.2, .02 + a.y*.2, -.46), X = a => at(a, -.05 + a.x*.25, -.085 + a.y*.25, -.78); // 당김 · 뻗음
-    const lp = (a, b, u) => ({x: lerp(a.x, b.x, u), y: lerp(a.y, b.y, u)});
-    // 베기: 칼끝이 찌른 두 점을 지나가는 선을 따라, 몸 바깥에서 시작해 반대쪽 바깥까지 크게 휘두름 (u = 0 → 1)
-    const H = (u) => at(lp(P.ls, P.rs, u*2.2 - .6), lerp(-.55, .5, u), lerp(.02, -.1, u), lerp(-.42, -.5, u), [1, 0, 0]);    // 가로: 왼쪽 바깥 → 두 어깨 → 오른쪽 바깥
-    const V = (u) => at(lp(P.neck, P.low, u*2.2 - .6), lerp(.12, .06, u), lerp(.22, -.34, u), lerp(-.42, -.5, u), [0, -1, 0]); // 세로: 머리 위 → 목 아래·몸통 아래 → 다리 쪽
     const R = RB;
-    T = keyPose([[0, idle], [.5, L(P.ls)], [R.ls, X(P.ls)], [R.ls + .03, X(P.ls)], [R.rs - .05, L(P.rs)], [R.rs, X(P.rs)], [R.rs + .05, X(P.rs)],
-                 [R.neck - .14, L(P.neck)], [R.neck, X(P.neck)], [R.neck + .03, X(P.neck)], [R.low - .05, L(P.low)], [R.low, X(P.low)], [R.low + .04, X(P.low)],
-                 [R.hSlash - .14, H(0)], [R.hSlash - .03, H(.35)], [R.hSlash + .03, H(.65)], [R.hSlash + .1, H(1)], [R.hSlash + .16, H(1)],
-                 [R.vSlash - .16, V(0)], [R.vSlash - .03, V(.35)], [R.vSlash + .03, V(.65)], [R.vSlash + .1, V(1)], [R.vSlash + .2, V(1)], [R.end, idle]], t);
+    // 가로 베기 = 일본도 평타를 왼쪽에서 오른쪽으로 (거울), 두 어깨 높이로 올려서 찌른 두 점을 지나감
+    const yo = P.ls.y*.5, by = P.ls.y*.9;
+    const K = (x, y, z, b, e) => poseDir(-x, y + yo, z, [-b[0], b[1] + by, b[2]], [-e[0], e[1], e[2]]);
+    const hWind = K(.58, .06, -.3, [.8, .45, .4], [-.55, -.1, -.83]), hMid = K(.04, -.06, -.7, [-.15, .12, -.98], [-1, -.1, 0]);
+    const hEnd = K(-.5, -.34, -.42, [-.82, -.15, .55], [-.45, -.3, .85]), hSettle = K(-.32, -.42, -.5, [-.75, -.3, -.2], [-.45, -.3, .85]);
+    // 세로 베기 = 검기 스킬(발도)처럼 머리 위에서 땅까지 세로로 크게 그음
+    const vTop = {x:.08, y:.3, z:-.45, rx:.3, ry:0, rz:.05}, vBot = {x:.05, y:-.5, z:-.7, rx:-2.3, ry:0, rz:-.1};
+    const vS0 = R.vSlash - .06, vS1 = vS0 + .16;
+    if (t < RB_H0)
+      T = keyPose([[0, idle], [.5, L(P.ls)], [R.ls, X(P.ls)], [R.ls + .03, X(P.ls)], [R.rs - .05, L(P.rs)], [R.rs, X(P.rs)], [R.rs + .05, X(P.rs)],
+                   [R.neck - .14, L(P.neck)], [R.neck, X(P.neck)], [R.neck + .03, X(P.neck)], [R.low - .05, L(P.low)], [R.low, X(P.low)], [R.low + .04, X(P.low)],
+                   [RB_H0, hWind]], t);
+    else if (t < RB_H1){ // 일본도 평타와 같은 키·같은 가속
+      let kw = (t - RB_H0)/(RB_H1 - RB_H0); if (kw > .26 && kw < .62){ const u = (kw - .26)/.36; kw = .26 + u*u*.36; }
+      T = keyPose([[0, hWind], [.26, hWind], [.44, hMid], [.62, hEnd], [1, hSettle]], kw);
+    }
+    else if (t < vS0) T = lerpPose(hSettle, vTop, ease(Math.min(1, (t - RB_H1)/(vS0 - .04 - RB_H1)))); // 머리 위로 치켜듦
+    else if (t < vS1) T = lerpPose(vTop, vBot, ease((t - vS0)/(vS1 - vS0)));                          // 내려그음
+    else T = keyPose([[vS1, vBot], [vS1 + .14, vBot], [R.end, idle]], t);
     snap = true;
   } else if (exec && exec.boss){
     const B2 = {x:.1, y:-.06, z:-.95, rx:-1.5, ry:.1, rz:.1}, B5 = {x:-.05, y:-.55, z:-.7, rx:-2.4, ry:0, rz:-.15};
