@@ -246,7 +246,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 80e97f</div>
+<div id="buildVer" class="hud">v2026.11.05 · f41a74</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3465,17 +3465,19 @@ function knightPunish(e, dt, p){ // 기사 쪽: 착지에서 일어나 → 다�
 //    기사: 피해 면역 + 체력 회복, 플레이어: 이동 속도 감소·점프 불가·패링 강도 감소
 // ③ 머리, 한쪽 어깨, 몸통(앞), 등에 성스러운 표식. 표식 하나에 일정 피해를 주면 깨지며 그로기 1 누적
 // ④ 표식을 모두 깨거나 그로기가 꽉 차면 즉시 해제: 노란 기운이 깨져 무너져 내리고 기사는 주춤하며 물러남 → 그로기가 꽉 찼으면 그대로 그로기
-const KS = {stompUp:.45, stompHit:.56, stomp:1.15, tapRaise:.55, tapHit:.7, tap:1.4, grow:.75, carve:.75, field:10, dome:46,
+const KS = {stompUp:.45, stompHit:.56, stomp:1.15, tapTurn:.4, tapRaise:.85, tapHit:.98, tap:1.8, grow:.75, carve:.75, field:10, dome:46,
             regen:6, markHp:12, flinch:.95, flinchDist:2.6, cd:35, hpGate:.7, slow:.62, parryMul:.6, aim:.5};
 const SANCT_Y = new THREE.Color(0xffd36a);
 let sanct = null; // 성역 연출 (새 판에서 비움: resetBoss → clearSanct)
 const sanctOn = () => !!(sanct && sanct.on);
 const KB_STOMP_UP = {pt:-.06, py:0, ct:-.12, cy:0, tL:.28, tR:-1.35, kL:.42, kR:1.5, drop:0};   // 오른 무릎을 높이 듦
 const KB_STOMP = {pt:.06, py:0, ct:.18, cy:0, tL:.42, tR:-.38, kL:.62, kR:.5, drop:.18};       // 발을 내리찍으며 무게를 실음
-const KB_TAP = {pt:.08, py:0, ct:.24, cy:0, tL:.4, tR:-.32, kL:.52, kR:.48, drop:.1};           // 칼끝을 찍으며 살짝 숙임
+const KB_TAP = {pt:.08, py:0, ct:.24, cy:0, tL:.5, tR:-.4, kL:.75, kR:.7, drop:.2};             // 칼을 꽂으며 무릎을 굽혀 무게를 실음
+const KB_TAPUP = {pt:-.03, py:0, ct:-.1, cy:0, tL:.22, tR:-.15, kL:.15, kR:.1, drop:-.03};     // 칼을 치켜들며 몸을 폄
 const KB_FLINCH = {pt:-.16, py:.1, ct:-.34, cy:.14, tL:-.12, tR:-.45, kL:.55, kR:.75, drop:.12}; // 주춤: 상체가 뒤로 젖혀짐
-const KH_TAPUP = {grip:new THREE.Vector3(.04, 1.7, .55), dir:new THREE.Vector3(0, -.2, 1)};  // 칼끝을 살짝 들어 앞으로
-const KH_TAP = {grip:new THREE.Vector3(.04, 1.15, .82), dir:new THREE.Vector3(0, -.86, .5)};  // 칼끝으로 앞 땅을 가볍게 찍음
+const KH_TAPDN = {grip:new THREE.Vector3(.04, 2.05, .9), dir:new THREE.Vector3(0, -.85, .53)}; // ① 칼을 들어 올리며 칼끝을 앞·아래로 돌림 (칼이 길어서 땅에 닿지 않게 들면서)
+const KH_TAPUP = {grip:new THREE.Vector3(.04, 2.3, .85), dir:new THREE.Vector3(0, -1, 0)};     // ② 수직 그대로 높이 치켜듦 (팔이 닿는 데까지)
+const KH_TAP = {grip:new THREE.Vector3(.04, 1.68, .85), dir:new THREE.Vector3(0, -1, 0)};      // ③ 그대로 수직(90°)으로 내려 앞 땅에 꽂음
 const KH_SAG = {grip:new THREE.Vector3(.3, .95, .55), dir:new THREE.Vector3(.35, -.55, .76)}; // 주춤하며 칼끝이 처짐
 function sanctTex(kind){ // 'field' = 바닥 성역 무늬, 'mark' = 성스러운 표식. 한 번만 그림
   sanctTex.c = sanctTex.c || {};
@@ -3671,8 +3673,9 @@ function knightSanct(e, dt, p){ // 기사 쪽 동작: 발 구르기 → 칼끝 �
     if (t >= KS.stomp){ e.state = 'stap'; e.st = 0; e.hitDone = false; }
   } else if (e.state === 'stap'){
     let b, h;
-    if (t < KS.tapRaise){ const k = easeIO(t/KS.tapRaise); b = KB.stance; h = khBlend(KH_STANCE(), KH_TAPUP, k); }
-    else if (t < KS.tapHit){ const k = easeIn((t - KS.tapRaise)/(KS.tapHit - KS.tapRaise)); b = kbBlend(KB.stance, KB_TAP, k); h = khBlend(KH_TAPUP, KH_TAP, k); }
+    if (t < KS.tapTurn){ const k = easeIO(t/KS.tapTurn); b = KB.stance; h = khBlend(KH_STANCE(), KH_TAPDN, k); }
+    else if (t < KS.tapRaise){ const k = easeIO((t - KS.tapTurn)/(KS.tapRaise - KS.tapTurn)); b = kbBlend(KB.stance, KB_TAPUP, k); h = khBlend(KH_TAPDN, KH_TAPUP, k); }
+    else if (t < KS.tapHit){ const k = easeIn((t - KS.tapRaise)/(KS.tapHit - KS.tapRaise)); b = kbBlend(KB_TAPUP, KB_TAP, k); h = khBlend(KH_TAPUP, KH_TAP, k); }
     else { const k = easeIO(clamp((t - KS.tapHit - .3)/(KS.tap - KS.tapHit - .3), 0, 1)); b = kbBlend(KB_TAP, KB.stance, k); h = khBlend(KH_TAP, KH_STANCE(), k); }
     knightBody(e, b, kDamp(16, dt)); knightHoldT(e, h, 0);
     if (!e.hitDone && t >= KS.tapHit){ e.hitDone = true; g.updateMatrixWorld(true); sanctCover(e, e.kSword.localToWorld(new THREE.Vector3(0, -2.2, 0))); }
@@ -3702,7 +3705,7 @@ function updateKnight(e, dt, p){
   e.t += dt; e.st += dt; if (e.sanctCd > 0) e.sanctCd -= dt;
   const g = e.g, P = KN_POSE, D = KN_DRAW, t = e.st;
   let d = Math.atan2(p.x - g.position.x, p.z - g.position.z) - e.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
-  const turn = e.state === 'intro' ? 1.5 : (e.state === 'guard' || e.state === 'windup' || e.state === 'backstep' || e.state === 'raise' || e.state === 'sstomp' || e.state === 'stap') ? 3 : 0; // 돌진·베기·내려찍기 중엔 방향을 각 단계가 정함
+  const turn = e.state === 'intro' ? 1.5 : (e.state === 'guard' || e.state === 'windup' || e.state === 'backstep' || e.state === 'raise' || e.state === 'sstomp') ? 3 : 0; // 칼을 꽂는 동안(stap)은 돌지 않음 // 돌진·베기·내려찍기 중엔 방향을 각 단계가 정함
   e.yaw += d*Math.min(1, dt*turn); g.rotation.y = e.yaw;                 // 플레이어 쪽으로 천천히 돌아섬
   e.rig.position.y = .9 - (e.drop || 0) - (e.kneeL.rotation.x + e.kneeR.rotation.x)*.02; // 무게중심 낮춤(drop) + 무릎을 굽히면 몸이 살짝 내려감
   const f = kDamp(14, dt);
