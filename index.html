@@ -236,7 +236,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.04 · e840ac</div>
+<div id="buildVer" class="hud">v2026.11.05 · b4a7a7</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3430,7 +3430,7 @@ function startExec(e){
     const p = yawObj.position, dx = p.x - e.g.position.x, dz = p.z - e.g.position.z, d = Math.hypot(dx, dz) || 1;
     Object.assign(exec, {boss:true, fx:dx/d, fz:dz/d, d0:d, y:0, ev:0});
     e.react = 'pre'; e.reactT = 0;
-  }
+  } else if (W.rapier) exec.rapier = true; // 레이피어: 머리 → 가슴 찌르고 다리 베기
 }
 // ---------- 보스 처형: 무릎을 밟고 뛰어올라 투구 틈에 꽂고, 비틀고, 내려오며 벰 (약 2.2초) ----------
 function updateBossExec(dt){
@@ -3520,8 +3520,44 @@ function bossReact(e, dt){ // 처형당하는 동안 거인의 반응
     if (eyeM) eyeM.visible = e.reactT > .7 ? (e.reactT > .9 || Math.random() > .5) : false;
   }
 }
+// ---------- 레이피어 처형: 머리를 찌르고, 가슴을 찌르고, 다리를 베어 넘어뜨림 (약 1.05초) ----------
+const RAP_EXEC = {head:.2, chest:.46, legs:.76, end:1.05};
+function rapierExecLook(t){ // 시선 높이(적 키 기준 비율): 머리 → 가슴 → 다리
+  return t < .3 ? .98 : t < .58 ? .6 : .22;
+}
+function updateRapierExec(dt){
+  const x = exec, e = x.e, p = yawObj.position, alive = enemies.includes(e), R = RAP_EXEC;
+  x.t += dt;
+  if (alive){
+    const ex = e.g.position.x, ez = e.g.position.z, hd = Math.hypot(ex - p.x, ez - p.z);
+    let d = Math.atan2(-(ex - p.x), -(ez - p.z)) - yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+    yaw += d*Math.min(1, dt*18);
+    const ty = 1.78*e.def.scale*rapierExecLook(x.t); // 찌를 곳·벨 곳으로 시선을 옮김
+    pitch += (Math.atan2(ty - p.y, Math.max(hd, .1)) - pitch)*Math.min(1, dt*14);
+    if (x.t < .15 && hd > e.r + 1.3){ const k = Math.min(1, dt*12); p.x += (ex - p.x)/hd*(hd - e.r - 1.3)*k; p.z += (ez - p.z)/hd*(hd - e.r - 1.3)*k; collide(p, .45, footY); }
+  }
+  if (!x.head && x.t >= R.head){ // 머리 찌르기
+    x.head = true; sfx.stab(); hitStopT = .05; shakeT = Math.max(shakeT, .06);
+    if (alive){ burst(e, 0xb0302a, 6); hitEnemy(e, 3, 'exec'); }
+  }
+  if (!x.chest && x.t >= R.chest){ // 가슴 찌르기
+    x.chest = true; sfx.stab(); hitStopT = .06; shakeT = Math.max(shakeT, .08);
+    if (enemies.includes(e)){ burst(e, 0xb0302a, 8); hitEnemy(e, 3, 'exec'); }
+  }
+  if (!x.slash && x.t >= R.legs){ // 다리 베기: 주변 적까지 휩씀
+    x.slash = true; sfx.slashHit(); shakeT = Math.max(shakeT, .2);
+    const cx = e.g.position.x, cz = e.g.position.z;
+    if (enemies.includes(e)){ burst(e, 0xb0302a, 10); hitEnemy(e, 6, 'exec'); }
+    for (const o of enemies.slice()){
+      if (o === e || !Combat.targetable(o, 'blunt') || Math.hypot(o.g.position.x - cx, o.g.position.z - cz) > 4 + o.r) continue;
+      burst(o, 0xb0302a, 4); hitEnemy(o, 4, 'execSplash', p);
+    }
+  }
+  if (x.t >= R.end){ if (enemies.includes(e)) e.groggyT = 0; exec = null; }
+}
 function updateExec(dt){
   if (exec.boss) return updateBossExec(dt);
+  if (exec.rapier) return updateRapierExec(dt);
   const x = exec, e = x.e, p = yawObj.position, alive = enemies.includes(e);
   x.t += dt;
   if (alive){
@@ -3583,6 +3619,20 @@ function animateSword(dt, dip){
     T = keyPose([[0, idle], [.35, {x:.3, y:-.3, z:-.55, rx:-1.0, ry:0, rz:.3}], [.7, {x:.3, y:-.12, z:-.42, rx:-.9, ry:0, rz:.45}],
                  [.85, B2], [1.0, B2], [1.3, {x:.1, y:-.06, z:-.88, rx:-1.5, ry:.1, rz:1.7}], [1.48, {x:.12, y:.32, z:-.5, rx:.35, ry:0, rz:0}],
                  [1.62, B5], [1.85, B5], [2.2, idle]], exec.t);
+    snap = true;
+  } else if (exec && exec.rapier){ // 레이피어 처형: 당겼다 머리 찌름 → 당겼다 가슴 찌름 → 오른쪽으로 감았다 다리를 가로로 벰
+    const R = RAP_EXEC, bl = (.19 + 1.05*(W.bladeScale || 1) + .075)*.8;
+    const tipDir = (hx, hy, hz) => { // 칼끝이 화면 가운데(시선이 향한 찌를 곳)에 오는 방향
+      const uh = -hz, hh = hx*hx + hy*hy + hz*hz, D = uh + Math.sqrt(Math.max(0, uh*uh - (hh - bl*bl)));
+      return [-hx, -hy, -D - hz];
+    };
+    const at = (x, y, z) => poseDir(x, y, z, tipDir(x, y, z), [0, 1, 0]);
+    const L = at(-.26, .02, -.46), X = at(-.05, -.085, -.78);          // 당김(왼쪽 위) · 뻗음(칼끝이 가운데로)
+    const sw = (x, y, z, b) => poseDir(x, y, z, b, [b[2], 0, -b[0]]);   // 날이 왼쪽(베는 쪽)을 향하는 가로 자세
+    const W0 = sw(.42, -.2, -.34, [.85, -.12, .5]), S1 = sw(.2, -.3, -.62, [.4, -.18, -.9]);
+    const S2 = sw(-.22, -.3, -.6, [-.55, -.18, -.81]), SE = sw(-.38, -.26, -.38, [-.9, -.1, .42]);
+    T = keyPose([[0, idle], [.12, L], [R.head, X], [.27, X], [.36, L], [R.chest, X], [.53, X],
+                 [.66, W0], [R.legs - .03, S1], [R.legs + .04, S2], [.86, SE], [R.end, idle]], exec.t);
     snap = true;
   } else if (exec){
     const dx = exec.dx, dy = exec.dy, thr = {x:.16, y:-.22, z:-.85, rx:-1.42, ry:.12, rz:.1};
