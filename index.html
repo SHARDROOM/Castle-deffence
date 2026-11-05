@@ -241,7 +241,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 49c796</div>
+<div id="buildVer" class="hud">v2026.11.05 · 637fab</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -2953,11 +2953,11 @@ function knightBody(e, b, f){
   e.drop = lerp(e.drop || 0, b.drop || 0, f);
 }
 const KB = { // 몸 자세 키 (라디안, drop은 몸 기준 높이)
-  stance: {pt:0, py:-.05, ct:.05, cy:-.05, tL:.3, tR:-.2, kL:.35, kR:.25, drop:.02},
-  coil:   {pt:-.04, py:.38, ct:-.14, cy:.42, tL:.42, tR:-.38, kL:.75, kR:.7, drop:.13},     // 무게중심을 낮추고 상체를 뒤로, 골반·어깨를 왼쪽 뒤로 감음
-  brace:  {pt:.06, py:.45, ct:.12, cy:.5, tL:.6, tR:-.75, kL:.55, kR:.85, drop:.16},        // 앞(오른)발을 디디며 제동, 한 번 더 감음
-  strike: {pt:.12, py:-.38, ct:.22, cy:-.42, tL:.5, tR:-.6, kL:.45, kR:.7, drop:.12},       // 베기 끝: 골반·어깨가 오른쪽으로 돌아감
-  follow: {pt:.1, py:-.48, ct:.25, cy:-.6, cz:.05, tL:.45, tR:-.55, kL:.5, kR:.65, drop:.11}, // 관성으로 조금 더
+  stance: {pt:0, py:.05, ct:.05, cy:.05, tL:.3, tR:-.2, kL:.35, kR:.25, drop:.02},
+  coil:   {pt:-.04, py:-.38, ct:-.14, cy:-.42, tL:.42, tR:-.38, kL:.75, kR:.7, drop:.13},     // 무게중심을 낮추고 상체를 뒤로, 골반·어깨를 왼쪽 뒤로 감음
+  brace:  {pt:.06, py:-.45, ct:.12, cy:-.5, tL:.6, tR:-.75, kL:.55, kR:.85, drop:.16},        // 앞(오른)발을 디디며 제동, 한 번 더 감음
+  strike: {pt:.12, py:.38, ct:.22, cy:.42, tL:.5, tR:-.6, kL:.45, kR:.7, drop:.12},       // 베기 끝: 골반·어깨가 오른쪽으로 돌아감
+  follow: {pt:.1, py:.48, ct:.25, cy:.6, cz:.05, tL:.45, tR:-.55, kL:.5, kR:.65, drop:.11}, // 관성으로 조금 더
 };
 function kbBlend(a, b, k){ const o = {}; for (const key in a) o[key] = lerp(a[key], b[key] ?? 0, k); return o; }
 const easeIO = t => t*t*(3 - 2*t), easeOut = t => 1 - (1 - t)*(1 - t), easeIn = t => t*t;
@@ -3022,7 +3022,7 @@ function knightCharge(e, dt, p, f){
     e.chargeDir.set(Math.sin(e.yaw), 0, Math.cos(e.yaw)); BOSS_WORLD.breakCharge(e); BOSS_WORLD.collide(g.position, e.r); // 앞을 막는 소품은 부수고, 성벽·탑엔 막힘
     e.run += mv/(KC.stride*e.def.scale);                                                      // 보폭(몸 크기 기준)만큼 갈 때마다 반 걸음
     const ph = e.run*Math.PI, sL = Math.sin(ph), push = Math.min(1, t/.08);
-    const b = {pt:.14*push, py:.18 - .1*push + Math.sin(ph)*.06, ct:.32*push, cy:.32 + Math.sin(ph)*.05, tL:-sL*.95, tR:sL*.95,
+    const b = {pt:.14*push, py:-.18 + .1*push + Math.sin(ph)*.06, ct:.32*push, cy:-.32 + Math.sin(ph)*.05, tL:-sL*.95, tR:sL*.95,
                kL:.35 + Math.max(0, sL)*1.1, kR:.35 + Math.max(0, -sL)*1.1, drop:.08 - Math.abs(Math.cos(ph))*.05};      // 뒤로 차는 다리는 무릎을 접음, 발을 디딜 때 몸이 내려감
     knightBody(e, b, Math.min(1, dt*22));
     const h = khBlend(KH.coil, KH.mid, .12); h.grip.y += Math.cos(ph*2)*.05; h.grip.x += Math.sin(ph)*.03;     // 걸음마다 칼이 위아래로 흔들림
@@ -3036,7 +3036,7 @@ function knightCharge(e, dt, p, f){
     const mv = Math.min(e.spd*dt, Math.max(0, dist - (e.r + 3)));
     g.position.x += Math.sin(e.yaw)*mv; g.position.z += Math.cos(e.yaw)*mv; BOSS_WORLD.collide(g.position, e.r);
     let d = toP(); e.yaw += clamp(d, -2*dt, 2*dt); g.rotation.y = e.yaw;                     // 마지막으로 플레이어 쪽을 겨눔
-    const b = kbBlend(kbBlend(KB.coil, {pt:.14, py:.08, ct:.32, cy:.37, tL:.0, tR:.0, kL:.6, kR:.6, drop:.06}, .5), KB.brace, k);
+    const b = kbBlend(kbBlend(KB.coil, {pt:.14, py:-.08, ct:.32, cy:-.37, tL:.0, tR:.0, kL:.6, kR:.6, drop:.06}, .5), KB.brace, k);
     knightBody(e, b, Math.min(1, dt*18));
     const h = khBlend(KH.coil, {grip:KH.coil.grip.clone().add(new THREE.Vector3(-.05, .05, -.12)), dir:KH.coil.dir}, k); // 칼을 조금 더 뒤로 당김
     knightHoldT(e, h, b.py + b.cy);
@@ -3090,9 +3090,9 @@ const KH_G = { // 몸통 기준 칼 쥔 자세 (몸통이 돈 만큼 함께 돌�
 const KB_G = {
   hop:   {pt:-.08, py:0, ct:-.1, cy:0, tL:-.5, tR:-.3, kL:1.0, kR:.8, drop:.02},          // 뒤로 뛰는 중: 다리를 접음
   land:  {pt:0, py:0, ct:.12, cy:0, tL:.35, tR:-.35, kL:.7, kR:.6, drop:.14},              // 내려앉음
-  raise: {pt:-.05, py:-.3, ct:-.16, cy:-.38, tL:.45, tR:-.4, kL:.6, kR:.55, drop:.09},     // 몸을 오른쪽으로 감고 상체를 젖힘
-  cut:   {pt:.16, py:.12, ct:.38, cy:.1, tL:.55, tR:-.75, kL:.75, kR:.95, drop:.19},       // 앞으로 숙이며 벰 (앞발 깊이)
-  past:  {pt:.14, py:.32, ct:.34, cy:.42, tL:.5, tR:-.7, kL:.7, kR:.85, drop:.16},         // 관성으로 왼쪽까지 돌아감
+  raise: {pt:-.05, py:.3, ct:-.16, cy:.38, tL:.45, tR:-.4, kL:.6, kR:.55, drop:.09},     // 몸을 오른쪽으로 감고 상체를 젖힘
+  cut:   {pt:.16, py:-.12, ct:.38, cy:-.1, tL:.55, tR:-.75, kL:.75, kR:.95, drop:.19},       // 앞으로 숙이며 벰 (앞발 깊이)
+  past:  {pt:.14, py:-.32, ct:.34, cy:-.42, tL:.5, tR:-.7, kL:.7, kR:.85, drop:.16},         // 관성으로 왼쪽까지 돌아감
 };
 const knightWaves = []; // 퍼져 나가는 부채꼴 충격파 (새 판에서 비움: resetBoss)
 let knightCrackTex = null;
