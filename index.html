@@ -236,7 +236,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 4592e8</div>
+<div id="buildVer" class="hud">v2026.11.05 · 90b02c</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -2806,6 +2806,7 @@ function weaponUI(){
 function resetSword(){
   gunSkill = null; rifleBuffT = 0; shellCharges = 0; shellLoadT = 0; if (heli){ scene.remove(heli.g); heli = null; }
   skillG = 0; skillPh = null; waves.forEach(wv => scene.remove(wv.g)); waves.length = 0;
+  if (kickLegM) kickLegM.visible = false; // 대검 처형 발차기 다리
   sheathT = 0; swordOut = false; drawT = 0; pendingSwing = false; greatRel = null; sheathPlant = false; guarding = false; parryHeld = false; guardSlashQ = null; guardBlocked = 0;
   swingT = 0; swordHitT = 0; parryT = 0; parryCd = 0; exec = null; rageT = 0; hitStopT = 0;
   parryBuf = 0; parrySeq = 0; parryHoldT = 0;
@@ -3431,9 +3432,10 @@ function startExec(e){
   const p = yawObj.position, dx = p.x - e.g.position.x, dz = p.z - e.g.position.z, d = Math.hypot(dx, dz) || 1;
   Object.assign(exec, {fx:dx/d, fz:dz/d, d0:d});
   if (e.boss){ // 보스 전용 처형
-    Object.assign(exec, {boss:true, y:0, ev:0, rapier: !!W.rapier});
+    Object.assign(exec, {boss:true, y:0, ev:0, rapier: !!W.rapier, great: !!W.great});
     e.react = 'pre'; e.reactT = 0;
   } else if (W.rapier) exec.rapier = true; // 레이피어: 머리 → 가슴 찌르고 다리 베기
+  else if (W.great) exec.great = true;      // 대검: 발로 차서 넘어뜨리고 내리찍기
 }
 const EXEC_GAP = 1.3; // 일반 처형: 적 몸 바깥에서 이만큼 떨어져 섬
 function execFace(x, e, dt){ // 처형당하는 적이 플레이어 쪽(시작할 때의 방향)을 정면으로 바라보게
@@ -3504,6 +3506,7 @@ function updateRapierBossExec(dt){
 }
 function updateBossExec(dt){
   if (exec.rapier) return updateRapierBossExec(dt);
+  if (exec.great) return updateGreatBossExec(dt);
   const x = exec, e = x.e, p = yawObj.position, alive = enemies.includes(e);
   x.t += dt; const t = x.t, S = e.def.scale, headY = 1.74*S, bx = e.g.position.x, bz = e.g.position.z;
   let dist;
@@ -3557,8 +3560,8 @@ function updateDroppedShield(e, dt){
     AV.q.setFromEuler(new THREE.Euler(Math.PI, e.yaw + .5, 0)); sg.quaternion.slerp(AV.q, Math.min(1, dt*10)); // 바닥에 눕힘
   }
 }
-function bossRecover(e){ // 그로기가 끝나면 방패를 다시 들고 일어남
-  e.react = null;
+function bossRecover(e){ // 그로기가 끝나면 방패를 다시 들고 일어남 (넘어졌던 적도 여기서 일어남)
+  e.react = null; e.rig.position.z = 0; e.rig.position.y = .9;
   if (e.shieldDropped){
     const sg = e.shieldFx.parent, h = e.shieldHome;
     h.parent.add(sg); sg.position.copy(h.pos); sg.rotation.copy(h.rot); sg.scale.set(1, 1, 1);
@@ -3625,8 +3628,105 @@ function updateRapierExec(dt){
   }
   if (x.t >= R.end){ if (enemies.includes(e)) e.groggyT = 0; exec = null; }
 }
+// ---------- 넘어진 자세: 뒤로 벌러덩 (대검 처형에서 차이거나 맞아서) ----------
+function downPose(e, dt){
+  e.reactT = (e.reactT || 0) + dt; if (e.stars) e.stars.visible = false; if (e.boss) updateDroppedShield(e, dt);
+  const f = Math.min(1, dt*9);
+  e.rig.rotation.set(lerp(e.rig.rotation.x, -1.45, f), 0, lerp(e.rig.rotation.z, 0, f));
+  e.rig.position.y += (.24 - e.rig.position.y)*f; e.rig.position.z += (-.55 - e.rig.position.z)*f;
+  mixRot(e.chest, -.1, 0, 0, f); mixRot(e.neck, .35, 0, 0, f);
+  mixRot(e.armL, -.4, 0, -1.1, f); mixRot(e.armR, -.4, 0, 1.1, f); mixRot(e.foreL, -.3, 0, 0, f); mixRot(e.foreR, -.3, 0, 0, f);
+  mixRot(e.thighL, -.35, 0, -.12, f); mixRot(e.thighR, -.15, 0, .12, f); mixRot(e.kneeL, .7, 0, 0, f); mixRot(e.kneeR, .35, 0, 0, f);
+}
+// ---------- 1인칭 발차기 다리 (대검 처형) ----------
+let kickLegM = null;
+function kickLeg(){
+  if (!kickLegM){
+    const g = new THREE.Group(), pm = new THREE.MeshLambertMaterial({color:0x3a3f4a}), bm = new THREE.MeshLambertMaterial({color:0x4a3222});
+    const shin = new THREE.Mesh(new THREE.BoxGeometry(.2, .2, .8), pm); shin.position.z = -.4; g.add(shin);
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(.26, .34, .2), bm); boot.position.set(0, .05, -.86); g.add(boot);  // 발바닥이 앞을 봄
+    const sole = new THREE.Mesh(new THREE.BoxGeometry(.27, .35, .04), new THREE.MeshLambertMaterial({color:0x1d1510})); sole.position.set(0, .05, -.97); g.add(sole);
+    g.visible = false; camera.add(g); kickLegM = g;
+  }
+  return kickLegM;
+}
+function setKick(k){ // k: 0 = 접어 둠(화면 아래) → 1 = 쭉 뻗음
+  const g = kickLeg(); g.visible = k > 0;
+  if (k > 0){ g.position.set(-.12, lerp(-1.0, -.42, k), lerp(.2, -.15, k)); g.rotation.set(lerp(-.8, .1, k), .1, 0); } // 화면 왼쪽 아래에서 앞으로 쭉
+}
+// ---------- 대검 일반 처형: 발로 차서 넘어뜨리고, 검기처럼 머리 위에서 내리찍음 (약 1.7초) ----------
+const GX = {kick:.32, raise:.55, down:1.1, end:1.7};
+function updateGreatExec(dt){
+  const x = exec, e = x.e, p = yawObj.position, alive = enemies.includes(e);
+  x.t += dt; const t = x.t;
+  if (alive){
+    const ex = e.g.position.x, ez = e.g.position.z, hd = Math.hypot(ex - p.x, ez - p.z);
+    let d = Math.atan2(-(ex - p.x), -(ez - p.z)) - yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+    yaw += d*Math.min(1, dt*18);
+    const ty = t < GX.kick ? e.ch : .35*e.def.scale; // 차기 전엔 가슴, 넘어진 뒤엔 바닥에 누운 몸
+    pitch += (Math.atan2(ty - p.y, Math.max(hd, .1)) - pitch)*Math.min(1, dt*10);
+    execFace(x, e, dt);
+    if (t < GX.kick) execPlace(x, e, dt);
+    else if (t < GX.kick + .25){ // 차인 적이 뒤로 밀려남
+      const k = Math.min(1, dt/.25)*1.1; e.g.position.x -= x.fx*k; e.g.position.z -= x.fz*k;
+    }
+  }
+  // 발차기: 접었다가(.12~.26) → 뻗어 맞힘(.32) → 거둠(.55)
+  const kk = t < .12 ? 0 : t < .26 ? (t - .12)/.14*.35 : t < GX.kick ? .35 + (t - .26)/.06*.65 : t < .55 ? 1 - (t - GX.kick)/.23 : 0;
+  setKick(Math.max(0, Math.min(1, kk)));
+  if (!x.kicked && t >= GX.kick){
+    x.kicked = true; sfx.kneelThud(); hitStopT = .07; shakeT = Math.max(shakeT, .25);
+    if (alive){ hitEnemy(e, 4, 'exec'); e.react = 'down'; e.reactT = 0; }
+  }
+  if (!x.slash && t >= GX.down){ // 검기처럼 내리찍음 (마지막 일격) + 주변 적
+    x.slash = true; sfx.execSlash(); sfx.kneelThud(); shakeT = Math.max(shakeT, .45); hitStopT = .1;
+    const cx = e.g.position.x, cz = e.g.position.z;
+    if (enemies.includes(e)){ burst(e, 0xb0302a, 12); hitEnemy(e, 8, 'exec', undefined, true); }
+    for (const o of enemies.slice()){
+      if (o === e || !Combat.targetable(o, 'blunt') || Math.hypot(o.g.position.x - cx, o.g.position.z - cz) > 4 + o.r) continue;
+      burst(o, 0xb0302a, 4); hitEnemy(o, 4, 'execSplash', p);
+    }
+  }
+  if (t >= GX.end){ setKick(0); if (enemies.includes(e)){ e.groggyT = 0; } exec = null; }
+}
+// 대검 내리찍기 자세: 머리 위(칼끝 위·조금 뒤) → 바닥의 적까지 깊게 (날은 내려가는 쪽)
+const GX_TOP = poseDir(.03, .92, -.3, [0, .96, .28], [0, .28, -.96]), GX_ASIDE = poseDir(.48, -.48, -.42, [.35, .6, -.72], [-.9, 0, -.4]), GX_BOT = poseDir(.04, -.42, -.78, [0, -.86, -.51], [0, -.51, .86]);
+// ---------- 대검 보스 처형: 칼등으로 왼쪽 화면 밖에서 오른쪽으로 크게 휘둘러 넘어뜨리고, 2.5초 동안 칼을 치켜든 채 버티다 내리찍음 (약 4.8초) ----------
+const GB = {swing:.78, raise:1.0, hold:1.45, down:4.0, end:4.8};
+function updateGreatBossExec(dt){
+  const x = exec, e = x.e, p = yawObj.position, alive = enemies.includes(e);
+  x.t += dt; const t = x.t, S = e.def.scale, bx = e.g.position.x, bz = e.g.position.z;
+  let dist; x.y = 0;
+  if (t < .4) dist = lerp(x.d0, 3.6, ease(t/.4));                                   // 달려듦
+  else if (t < GB.raise) dist = 3.6;                                                // 휘두름
+  else if (t < GB.hold) dist = lerp(3.6, 2.9, ease((t - GB.raise)/(GB.hold - GB.raise))); // 쓰러진 거인 앞으로 한 걸음
+  else dist = 2.9;
+  p.x = bx + x.fx*dist; p.z = bz + x.fz*dist; if (alive) execFace(x, e, dt);
+  const eye = 1.6, lookY = t < GB.swing + .1 ? 1.1*S : .3*S;                       // 휘두를 땐 몸통, 넘어진 뒤엔 바닥
+  let d = Math.atan2(-(bx - p.x), -(bz - p.z)) - yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+  yaw += d*Math.min(1, dt*20);
+  pitch += (Math.atan2(lookY - eye, dist) - pitch)*Math.min(1, dt*(t < GB.swing + .1 ? 14 : 5));
+  if (!x.s1 && t >= .08){ x.s1 = true; sfx.execStep(); }
+  if (!x.s2 && t >= .24){ x.s2 = true; sfx.execStep(); }
+  if (!x.s3 && t >= GB.swing - .2){ x.s3 = true; sfx.bossSwing(.5); }
+  if (x.ev === 0 && t >= GB.swing){ // 칼등으로 후려쳐 넘어뜨림
+    x.ev = 1; sfx.clang(); sfx.bossRoar(); hitStopT = .16; shakeT = Math.max(shakeT, .5);
+    if (alive){ hitEnemy(e, 10, 'bossExec'); dropShield(e); e.react = 'down'; e.reactT = 0; }
+  }
+  if (x.ev === 1 && t >= GB.swing + .35){ x.ev = 2; sfx.kneelThud(); shakeT = Math.max(shakeT, .35); } // 땅에 쓰러지는 소리
+  if (x.ev === 2 && t >= GB.hold){ x.ev = 3; sfx.execPull(); }                                       // 치켜들고 버팀
+  if (x.ev === 3 && t >= GB.down){ // 내리찍음 (마지막 일격)
+    x.ev = 4; sfx.execSlash(); sfx.kneelThud(); shakeT = Math.max(shakeT, .65); hitStopT = .15;
+    if (enemies.includes(e)){ burst(e, 0xffe08a, 14); hitEnemy(e, 30, 'bossExec', undefined, true); }
+  }
+  if (t >= GB.end){
+    exec = null; footY = 0;
+    if (enemies.includes(e)){ e.groggyT = 0; e.kneelT = 5; } // 5초 동안 쓰러져 있다가 일어남
+  }
+}
 function updateExec(dt){
   if (exec.boss) return updateBossExec(dt);
+  if (exec.great) return updateGreatExec(dt);
   if (exec.rapier) return updateRapierExec(dt);
   const x = exec, e = x.e, p = yawObj.position, alive = enemies.includes(e);
   x.t += dt;
@@ -3688,7 +3788,27 @@ function animateSword(dt, dip){
   const RAP_IDLE = poseDir(.26, -.3 - dip*.3, -.55, [-.105, .121, -.987], [1, 0, 0]); // 레이피어 겨눔: 칼끝을 화면 가운데(조준점)로
   const idle = (W.rapier && swordOut) ? RAP_IDLE : W.great ? (swordOut ? Object.assign({}, GREAT_IDLE, {y:GREAT_IDLE.y - dip*.3}) : Object.assign({}, GREAT_BACK)) : swordOut ? {x:.34, y:-.44 - dip*.3, z:-.6, rx:-1.25, ry:-.1, rz:.2} : Object.assign({}, scabCur); // 뽑았으면 겨눈 자세, 아니면 칼집과 함께
   let T, snap = false;
-  if (exec && exec.boss && exec.rapier){ // 레이피어 보스 처형: 칼끝이 화면의 찌를 곳·벨 선을 따라감
+  if (exec && exec.great && !exec.boss){ // 대검 일반 처형: 차는 동안 칼은 낮게 들고 → 머리 위로 치켜듦 → 바닥의 적까지 내리찍음
+    const t = exec.t, G = GX;
+    if (t < G.down - .07) T = keyPose([[0, idle], [.14, GX_ASIDE], [G.raise, GX_ASIDE], [G.down - .3, GX_TOP], [G.down - .07, GX_TOP]], t); // 찰 땐 칼을 오른쪽 아래로 비켜 둠
+    else if (t < G.down + .08) T = lerpPose(GX_TOP, GX_BOT, ease((t - (G.down - .07))/.15));
+    else T = keyPose([[G.down + .08, GX_BOT], [G.down + .3, GX_BOT], [G.end, idle]], t);
+    snap = true;
+  } else if (exec && exec.boss && exec.great){ // 대검 보스 처형: 칼등으로 왼쪽 밖 → 오른쪽 밖 크게 후려침 → 치켜들고 버팀 → 내리찍음
+    const t = exec.t, G = GB;
+    // 수평으로 도는 칼: 칼끝 방향 b, 날은 움직이는 쪽의 반대(칼등이 앞장섬) = [bz, 0, -bx]
+    const H = (x, y, z, b) => poseDir(x, y, z, b, [b[2], 0, -b[0]]);
+    const wl = H(-1.0, -.12, -.1, [-.85, .1, .5]), wl2 = H(-.85, -.1, -.25, [-.95, .08, .3]);  // 왼쪽 화면 밖에 감아 둠
+    const mid = H(.02, -.18, -.72, [.05, .05, -1]), wr = H(.95, -.15, -.15, [.88, .05, .45]); // 정면을 지나 오른쪽 밖으로
+    const tremble = t > G.hold && t < G.down - .1 ? Math.sin(t*38)*.006 : 0;                  // 치켜든 채 힘을 모으며 떨림
+    const top = poseDir(.03 + tremble, .92, -.3, [0, .96, .28], [0, .28, -.96]); // 두 팔이 화면 양옆에서 올라가 가운데는 트임
+    if (t < G.raise)
+      T = keyPose([[0, idle], [.32, wl], [G.swing - .12, wl2], [G.swing, mid], [G.swing + .1, wr], [G.raise, wr]], t);
+    else if (t < G.down - .07) T = keyPose([[G.raise, wr], [G.hold, top], [G.down - .07, top]], t);
+    else if (t < G.down + .1) T = lerpPose(top, GX_BOT, ease((t - (G.down - .07))/.17));
+    else T = keyPose([[G.down + .1, GX_BOT], [G.down + .4, GX_BOT], [G.end, idle]], t);
+    snap = true;
+  } else if (exec && exec.boss && exec.rapier){ // 레이피어 보스 처형: 칼끝이 화면의 찌를 곳·벨 선을 따라감
     const bl = (.19 + 1.05*(W.bladeScale || 1) + .075)*.8, P = exec.tg ? exec.tg.a : RB_DEF, t = exec.t;
     const tipTo = (aim, hx, hy, hz) => { // 손(hx,hy,hz)에서 칼끝이 (aim.x, aim.y, -1) 시선 위에 오는 방향
       const ux = aim.x, uy = aim.y, uu = ux*ux + uy*uy + 1, uh = ux*hx + uy*hy - hz, hh = hx*hx + hy*hy + hz*hz;
@@ -3865,7 +3985,7 @@ function animateSword(dt, dip){
   else if (sheathT > 0) fl = Math.PI*smooth(Math.min(1, sheathT/.4));
   else if (!swordOut && !exec && !skillPh) fl = Math.PI;
   else if (greatRel) fl = Math.PI;
-  else if (exec && (exec.rapier || !exec.boss)) fl = Math.PI; // 일반·레이피어 처형 자세도 poseDir 기준 (날 = 모델 -x)
+  else if (exec && (exec.rapier || exec.great || !exec.boss)) fl = Math.PI; // 일반·레이피어 처형 자세도 poseDir 기준 (날 = 모델 -x)
   else if (swingT > 0) fl = Math.PI; // 베기 자세는 날 방향을 직접 지정 (poseDir 기준) // 대검 베기 자세는 날 방향을 직접 지정
   else fl = null;
   if (inScab && fl !== null) swFlip = fl; // 칼집 속에선 날 방향도 즉시 맞춤
@@ -5016,7 +5136,7 @@ function update(dt){
     if (e.groggyT > 0 || e.kneelT > 0){ // 패링당해 그로기, 또는 처형 후 무릎 꿇음: 제자리에 멈춤
       if (!(exec && exec.e === e)) e.groggyT -= dt;
       if (e.kneelT > 0) e.kneelT -= dt;
-      if (e.boss && e.react) bossReact(e, dt); else groggyPose(e, dt);
+      if (e.react === 'down') downPose(e, dt); else if (e.boss && e.react) bossReact(e, dt); else groggyPose(e, dt);
       if (e.flash > 0){ e.flash -= dt; tint(e, 0xffffff); } else tint(e, 0x3a3000);
       continue;
     }
