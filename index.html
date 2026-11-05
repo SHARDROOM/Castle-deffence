@@ -236,7 +236,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 5b822e</div>
+<div id="buildVer" class="hud">v2026.11.05 · 4592e8</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3653,7 +3653,9 @@ function updateExec(dt){
   if (x.t >= K.end){ if (enemies.includes(e)) e.groggyT = 0; exec = null; }
 }
 const KATANA_EXEC = {cut1:.22, cut2:.46, down:.78, end:1.12}; // 각 베기가 맞는 순간
-const KX_TOP = {x:.08, y:.3, z:-.45, rx:.3, ry:0, rz:.05}, KX_BOT = {x:.05, y:-.5, z:-.7, rx:-2.3, ry:0, rz:-.1}; // 검기 스킬(발도)의 내리치기 자세
+// 검기 스킬(발도)의 내리치기 자세: 머리 위(칼끝은 위·조금 뒤) → 땅(칼끝은 아래 앞). 날은 언제나 내려가는 쪽 (위에선 앞, 아래에선 아래·뒤)
+// (검기 스킬·일본도 처형·레이피어 보스 처형이 함께 씀. 모두 칼을 칼날 축으로 뒤집은 상태라 poseDir의 날 방향 그대로)
+const KX_TOP = poseDir(.08, .3, -.45, [0, .955, .296], [0, .296, -.955]), KX_BOT = poseDir(.05, -.5, -.7, [0, -.666, -.746], [0, -.746, .666]);
 // 1인칭 검 자세: 처형/휘두르기는 키프레임, 평소·패링은 부드럽게 따라감
 const SWC = {x:.34, y:-.44, z:-.6, q:new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.25, -.1, .2))};
 const ease = t => 1 - (1 - t)*(1 - t);
@@ -3702,7 +3704,7 @@ function animateSword(dt, dip){
     const hWind = K(.58, .06, -.3, [.8, .45, .4], [-.55, -.1, -.83]), hMid = K(.04, -.06, -.7, [-.15, .12, -.98], [-1, -.1, 0]);
     const hEnd = K(-.5, -.34, -.42, [-.82, -.15, .55], [-.45, -.3, .85]), hSettle = K(-.32, -.42, -.5, [-.75, -.3, -.2], [-.45, -.3, .85]);
     // 세로 베기 = 검기 스킬(발도)처럼 머리 위에서 땅까지 세로로 크게 그음
-    const vTop = {x:.08, y:.3, z:-.45, rx:.3, ry:0, rz:.05}, vBot = {x:.05, y:-.5, z:-.7, rx:-2.3, ry:0, rz:-.1};
+    const vTop = KX_TOP, vBot = KX_BOT;
     const vS0 = R.vSlash - .06, vS1 = vS0 + .16;
     if (t < RB_H0)
       T = keyPose([[0, idle], [.5, L(P.ls)], [R.ls, X(P.ls)], [R.ls + .03, X(P.ls)], [R.rs - .05, L(P.rs)], [R.rs, X(P.rs)], [R.rs + .05, X(P.rs)],
@@ -3740,9 +3742,13 @@ function animateSword(dt, dip){
     const K = KATANA_EXEC, t = exec.t;
     // s = 1: 왼쪽 위 → 오른쪽 아래, s = -1: 오른쪽 위 → 왼쪽 아래 (거울). 날은 베는 방향(아래 바깥쪽)을 향함
     const D = (s, x, y, z, b, e) => poseDir(x*s, y, z, [b[0]*s, b[1], b[2]], [e[0]*s, e[1], e[2]]);
-    const up = s => D(s, -.34, .22, -.4, [-.55, .7, .45], [.6, -.6, -.5]);     // 어깨 너머로 치켜든 자세 (칼끝은 뒤쪽 위)
-    const mid = s => D(s, -.02, -.04, -.66, [.2, .35, -.92], [.7, -.7, 0]);   // 몸 앞을 비스듬히 지남
-    const low = s => D(s, .38, -.42, -.42, [.75, -.45, .5], [.4, -.5, .75]);  // 반대쪽 아래까지 흘림
+    // 칼은 한 평면(앞 방향 f와 왼쪽 위 u)에서 돌고, 날은 언제나 칼끝이 움직이는 쪽(칼과 수직)을 향함
+    const f = new THREE.Vector3(0, .2, -1).normalize(), u = new THREE.Vector3(-1, 1, 0); u.addScaledVector(f, -u.dot(f)).normalize();
+    const CP = (s, x, y, z, th) => D(s, x, y, z, f.clone().multiplyScalar(Math.cos(th)).addScaledVector(u, Math.sin(th)).toArray(),
+                                               f.clone().multiplyScalar(Math.sin(th)).addScaledVector(u, -Math.cos(th)).toArray());
+    const up = s => CP(s, -.34, .22, -.4, 1.9);     // 어깨 너머로 치켜든 자세 (칼끝은 왼쪽 위 뒤)
+    const mid = s => CP(s, -.02, -.04, -.66, 0);    // 몸 앞을 비스듬히 지남 (날은 오른쪽 아래)
+    const low = s => CP(s, .38, -.42, -.42, -1.75); // 반대쪽 아래까지 흘림
     const cut = (s, t0) => [[t0 - .1, up(s)], [t0 - .02, up(s)], [t0 + .02, mid(s)], [t0 + .08, low(s)]]; // t0 = 맞는 순간
     if (t < K.down - .1)
       T = keyPose([[0, idle], ...cut(1, K.cut1), ...cut(-1, K.cut2), [K.down - .22, KX_TOP], [K.down - .1, KX_TOP]], t);
@@ -3753,7 +3759,7 @@ function animateSword(dt, dip){
     T = {x:-.22, y:-.52, z:-.32, rx:1.1, ry:0, rz:.7};
   } else if (skillPh === 'draw'){ // 발도: 머리 위에서 땅까지 세로로 크게 그음
     const k = ease(Math.min(1, skillT/.16));
-    T = lerpPose({x:.08, y:.3, z:-.45, rx:.3, ry:0, rz:.05}, {x:.05, y:-.5, z:-.7, rx:-2.3, ry:0, rz:-.1}, k); // 위에서 아래로 세로로 내려그음
+    T = lerpPose(KX_TOP, KX_BOT, k); // 위에서 아래로 세로로 내려그음
     snap = true;
   } else if (greatRel && W.great){ // 대검 반격 자세
     const t = greatRel.t;
@@ -3859,10 +3865,11 @@ function animateSword(dt, dip){
   else if (sheathT > 0) fl = Math.PI*smooth(Math.min(1, sheathT/.4));
   else if (!swordOut && !exec && !skillPh) fl = Math.PI;
   else if (greatRel) fl = Math.PI;
+  else if (exec && (exec.rapier || !exec.boss)) fl = Math.PI; // 일반·레이피어 처형 자세도 poseDir 기준 (날 = 모델 -x)
   else if (swingT > 0) fl = Math.PI; // 베기 자세는 날 방향을 직접 지정 (poseDir 기준) // 대검 베기 자세는 날 방향을 직접 지정
   else fl = null;
   if (inScab && fl !== null) swFlip = fl; // 칼집 속에선 날 방향도 즉시 맞춤
-  else if (fl !== null && (greatRel || drawT > 0 || sheathT > 0 || swingT > 0 || !swordOut)){ let dfl = fl - swFlip; dfl = Math.atan2(Math.sin(dfl), Math.cos(dfl)); swFlip += dfl*Math.min(1, dt*30); } else swFlip += (0 - swFlip)*Math.min(1, dt*16);
+  else if (fl !== null && (greatRel || drawT > 0 || sheathT > 0 || swingT > 0 || !swordOut || exec)){ let dfl = fl - swFlip; dfl = Math.atan2(Math.sin(dfl), Math.cos(dfl)); swFlip += dfl*Math.min(1, dt*30); } else swFlip += (0 - swFlip)*Math.min(1, dt*16);
   if (gunModel) gunModel.rotation.y = swFlip;
   const au = gunModel && gunModel.userData.aura; // 기백: 평소엔 은은하게 일렁이고, 가드 중엔 환하게
   if (au){ const tt = performance.now()/1000; au.forEach((m, i) => m.material.opacity = m.userData.op*(guarding ? 2.2 : 1)*(.75 + .25*Math.sin(tt*6 + i))); }
