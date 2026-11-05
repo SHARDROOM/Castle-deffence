@@ -241,7 +241,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 9fb1a4</div>
+<div id="buildVer" class="hud">v2026.11.05 · 4a8b33</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -1959,6 +1959,7 @@ function makeSoldier(type){
       const spine = new THREE.Mesh(bx(.05,1.46,.025), M(0x8f96a0)); spine.position.set(0, -1.33, .07); foreR.add(spine); } // 칼등
   }
   if (type==='knight'){ // 왕국의 마지막 기사: 상자만으로 겹치고 기울여 쌓은 황금 판금, 십자 눈구멍의 각진 투구, 퀴스, 대검 두 자루
+    const kPaul = []; // 어깨 갑옷 [왼쪽, 오른쪽]
     const gold = M(0xd4a640), goldD = M(0x9c7424), goldL = M(0xf0cf72), black = M(0x14100c), leather = M(0x3a2414), steelK = M(0xd7dce2);
     const P = (parent, w, h, d, mat, x, y, z, rx = 0, ry = 0, rz = 0, head) => { const m = add(parent, bx(w, h, d), mat, x, y, z, head); m.rotation.set(rx, ry, rz); return m; }; // 상자 하나 (기울임 포함)
     // 투구: 약간 길쭉한 9각기둥 (면이 정면을 보게 돌림, 면마다 각진 음영), 윗면·목 테두리, 십자 눈구멍
@@ -1982,7 +1983,7 @@ function makeSoldier(type){
     for (let i = 0; i < 3; i++) P(chest, .56 - i*.03, .09, .36 - i*.01, i % 2 ? goldD : gold, 0, .04 - i*.08, .02, .12, 0, 0); // 배 겹판 (앞으로 살짝 기울여 겹침)
     // 어깨갑옷: 윗판 + 아래로 계단처럼 내려가며 바깥으로 기울어지는 겹판 세 장
     for (const sx of [-1, 1]){
-      const sh = new THREE.Group(); sh.position.set(sx*.47, .52, 0); chest.add(sh);
+      const sh = new THREE.Group(); sh.position.set(sx*.47, .52, 0); chest.add(sh); kPaul[sx < 0 ? 0 : 1] = sh; // 팔을 들면 어깨 갑옷도 따라 들림 (knightPauldrons)
       P(sh, .32, .13, .42, gold, 0, .02, 0, 0, 0, -sx*.3);
       P(sh, .34, .09, .44, goldD, sx*.04, -.07, 0, 0, 0, -sx*.45);
       P(sh, .34, .09, .44, gold, sx*.07, -.15, 0, 0, 0, -sx*.6);
@@ -2024,7 +2025,7 @@ function makeSoldier(type){
     hipAdd(bx(.09, 1.45, .2), leather, -.72); hipAdd(bx(.11, .12, .22), gold, -.02); hipAdd(bx(.11, .14, .22), gold, -1.42); hipAdd(bx(.1, .3, .21), goldD, -.6);
     const KS_ROT = new THREE.Euler(.32, 0, -.1), KS_POS = new THREE.Vector3(-.34, -.02, -.06);
     kSheath.add(hip);
-    S_extra = {swordTip: tipO, kSword, kBlade, kSheath, KS_ROT, KS_POS};
+    S_extra = {swordTip: tipO, kSword, kBlade, kSheath, KS_ROT, KS_POS, kPaul};
     // 등에 멘 대검: 칼집째 비스듬히, 손잡이가 오른쪽 어깨 위로
     const back = new THREE.Group(); back.position.set(0, .36, -.32); back.rotation.z = -.55; back.scale.setScalar(.8); chest.add(back); // 칼집 끝이 허리 아래쯤에서 끝나게
     const bAdd = (geo, m, y, z = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(0, y, z); back.add(o); return o; };
@@ -3064,49 +3065,57 @@ function knightCharge(e, dt, p, f){
     if (t >= KC.recover){ e.state = 'guard'; e.st = .8; e.atkCd = KC.cd; }
   } else { e.state = 'guard'; e.st = .8; } // 그 밖(그로기에서 돌아옴 등): 기본 자세로
 }
-// ---------- 왕국의 마지막 기사: 가까우면 물러나며 피하고 → 땅을 베어 충격파 ----------
-// backstep: 뒤로 크게 뛰어 물러남 (이 동안 공격이 닿지 않음) → raise: 두 손으로 칼을 머리 위로 치켜들며 상체를 젖혀 힘을 모음 →
-// smash: 골반 → 어깨 → 칼 순서로 내려찍어 땅을 벰 → 충격파가 땅을 가르며 플레이어 쪽으로 빠르게 퍼짐 → stuck: 칼이 땅에 박힌 채 잠깐 → pull: 뽑으며 기본 자세로
-const KG = {close:7, back:.45, backDist:5.5, raise:.55, smash:.16, stuck:.3, pull:.6, cd:3.4,
-            wave:{speed:24, len:30, w:1.5, dmg:26}};
-const KH_G = {
-  over:  {grip:new THREE.Vector3(.05, 2.25, .15), dir:new THREE.Vector3(0, .62, -.78)},   // 머리 위로 치켜듦 (칼끝은 뒤로)
-  ground:{grip:new THREE.Vector3(.02, .95, 1.0),  dir:new THREE.Vector3(0, -.62, .78)},   // 앞쪽 땅에 박힘
+// ---------- 왕국의 마지막 기사: 가까우면 물러나며 피하고 → 땅을 베어 부채꼴 충격파 ----------
+// backstep: 뒤로 크게 뛰어 물러남 (이 동안 공격이 닿지 않음) → raise: 칼을 오른쪽 어깨 위로 끌어올리며 몸을 오른쪽으로 감아 힘을 모음 →
+// smash: 골반 → 어깨 → 칼 순서로 풀며 앞쪽 땅을 비스듬히 베어 지나감 (칼이 땅에 닿는 순간 부채꼴 충격파) →
+// stuck: 멈추지 않고 왼쪽 아래까지 관성으로 흘림 → pull: 무게중심을 되찾으며 기본 자세로
+const KG = {close:7, back:.45, backDist:5.5, raise:.55, smash:.24, impact:.5, stuck:.3, pull:.6, cd:3.4,
+            wave:{speed:22, len:24, half:.62, rays:6, dmg:26}};
+const KH_G = { // 몸통 기준 칼 쥔 자세 (몸통이 돈 만큼 함께 돌림)
+  over:  {grip:new THREE.Vector3(.36, 2.0, .2),  dir:new THREE.Vector3(.5, .62, -.6)},     // 오른쪽 어깨 위로 끌어올림 (칼끝은 뒤·위)
+  ground:{grip:new THREE.Vector3(.08, 1.0, 1.0), dir:new THREE.Vector3(-.2, -.72, .66)},   // 앞쪽 땅을 비스듬히 벰 (칼끝이 땅에 닿음)
+  past:  {grip:new THREE.Vector3(-.42, .9, .72), dir:new THREE.Vector3(-.78, -.42, .46)},  // 왼쪽 아래로 베어 지나감
 };
 const KB_G = {
   hop:   {pt:-.08, py:0, ct:-.1, cy:0, tL:-.5, tR:-.3, kL:1.0, kR:.8, drop:.02},          // 뒤로 뛰는 중: 다리를 접음
   land:  {pt:0, py:0, ct:.12, cy:0, tL:.35, tR:-.35, kL:.7, kR:.6, drop:.14},              // 내려앉음
-  raise: {pt:-.06, py:.05, ct:-.24, cy:.08, tL:.4, tR:-.45, kL:.55, kR:.5, drop:.06},      // 상체를 젖히고 칼을 치켜듦
-  smash: {pt:.18, py:0, ct:.45, cy:-.05, tL:.55, tR:-.75, kL:.8, kR:.95, drop:.2},         // 앞으로 숙이며 내려찍음 (앞발 깊이)
+  raise: {pt:-.05, py:-.3, ct:-.16, cy:-.38, tL:.45, tR:-.4, kL:.6, kR:.55, drop:.09},     // 몸을 오른쪽으로 감고 상체를 젖힘
+  cut:   {pt:.16, py:.12, ct:.38, cy:.1, tL:.55, tR:-.75, kL:.75, kR:.95, drop:.19},       // 앞으로 숙이며 벰 (앞발 깊이)
+  past:  {pt:.14, py:.32, ct:.34, cy:.42, tL:.5, tR:-.7, kL:.7, kR:.85, drop:.16},         // 관성으로 왼쪽까지 돌아감
 };
-const knightWaves = []; // 퍼져 나가는 충격파 (새 판에서 비움: resetBoss)
+const knightWaves = []; // 퍼져 나가는 부채꼴 충격파 (새 판에서 비움: resetBoss)
 function spawnKnightWave(x, z, yawT){
-  const dx = Math.sin(yawT), dz = Math.cos(yawT);
-  knightWaves.push({x, z, dx, dz, d:0, laid:0, puff:0, hit:false});
+  const W = KG.wave;
+  const geo = new THREE.RingGeometry(.9, 1, 32, 1, -W.half, W.half*2); geo.rotateX(-Math.PI/2);  // 맨 앞의 빛나는 호
+  const arc = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color:0xffb070, transparent:true, opacity:.85, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide}));
+  arc.position.set(x, .06, z); arc.rotation.y = yawT - Math.PI/2; scene.add(arc);
+  const rays = []; for (let i = 0; i < W.rays; i++) rays.push({a: yawT + (i/(W.rays - 1) - .5)*2*W.half + (Math.random() - .5)*.12, laid:0, x, z});
+  knightWaves.push({x, z, yaw:yawT, d:0, rays, arc, puff:0, hit:false});
   sfx.bossSlam(); crackRing(x, z);
 }
 function updateKnightWaves(dt){
   const W = KG.wave, pp = yawObj.position;
   for (let i = knightWaves.length - 1; i >= 0; i--){
     const w = knightWaves[i], d0 = w.d; w.d = Math.min(W.len, w.d + W.speed*dt);
-    while (w.laid + .7 <= w.d){ // 지나간 자리를 지그재그로 갈라 놓음
-      const a = w.laid, b = w.laid + .7, j = () => (Math.random() - .5)*.35;
-      crackSeg(w.x + w.dx*a + w.dz*j(), w.z + w.dz*a - w.dx*j(), w.x + w.dx*b + w.dz*j(), w.z + w.dz*b - w.dx*j(), .32);
-      w.laid = b;
+    for (const r of w.rays) while (r.laid + 1.2 <= w.d){ // 부채꼴 안의 여러 갈래로 땅을 지그재그로 가름
+      const a1 = r.a + (Math.random() - .5)*.12, b = r.laid + 1.2;
+      const nx = w.x + Math.sin(a1)*b, nz = w.z + Math.cos(a1)*b;
+      crackSeg(r.x, r.z, nx, nz, .3*(1 - r.laid/W.len*.5)); r.x = nx; r.z = nz; r.laid = b;
     }
-    w.puff -= dt; if (w.puff <= 0){ w.puff = .05; groundBurst(w.x + w.dx*w.d, w.z + w.dz*w.d, 2, .8); } // 맨 앞에서 흙·돌이 튐
-    // 맨 앞이 플레이어 자리를 지나는 순간: 갈라지는 선 가까이 땅에 있으면 맞음 (구르기·점프로 피함, 패링 불가)
-    const rx = pp.x - w.x, rz = pp.z - w.z, along = rx*w.dx + rz*w.dz, side = Math.abs(rx*w.dz - rz*w.dx);
-    if (!w.hit && along >= d0 - .3 && along <= w.d + .3 && side < W.w && footY < .6){
-      w.hit = true; hurtPlayer({dmg: W.dmg*edm(), kind: 'bossAoe', from: {x: w.x + w.dx*(w.d - 2), z: w.z + w.dz*(w.d - 2)}}); shakeT = Math.max(shakeT, .3);
+    w.arc.scale.set(Math.max(.01, w.d), 1, Math.max(.01, w.d)); w.arc.material.opacity = .85*(1 - w.d/W.len);
+    w.puff -= dt; if (w.puff <= 0){ w.puff = .06; const a = w.yaw + (Math.random() - .5)*2*W.half; groundBurst(w.x + Math.sin(a)*w.d, w.z + Math.cos(a)*w.d, 2, 1); } // 호를 따라 흙·돌이 튐
+    // 맨 앞(호)이 플레이어 자리를 지나는 순간: 부채꼴 안, 땅에 있으면 맞음 (구르기·점프로 피함, 패링 불가)
+    const rx = pp.x - w.x, rz = pp.z - w.z, rd = Math.hypot(rx, rz);
+    let da = Math.atan2(rx, rz) - w.yaw; da = Math.abs(Math.atan2(Math.sin(da), Math.cos(da)));
+    if (!w.hit && rd >= d0 - .4 && rd <= w.d + .4 && da < W.half + Math.atan2(1, Math.max(rd, 1)) && footY < .6){
+      w.hit = true; hurtPlayer({dmg: W.dmg*edm(), kind: 'bossAoe', from: {x: w.x, z: w.z}}); shakeT = Math.max(shakeT, .3);
     }
-    if (w.d >= W.len) knightWaves.splice(i, 1);
+    if (w.d >= W.len){ scene.remove(w.arc); w.arc.geometry.dispose(); w.arc.material.dispose(); knightWaves.splice(i, 1); }
   }
 }
+function clearKnightWaves(){ for (const w of knightWaves){ scene.remove(w.arc); w.arc.geometry.dispose(); w.arc.material.dispose(); } knightWaves.length = 0; }
 function knightClose(e, dt, p){
   const g = e.g, t = e.st;
-  const dist = Math.hypot(p.x - g.position.x, p.z - g.position.z);
-  const toP = () => { let d = Math.atan2(p.x - g.position.x, p.z - g.position.z) - e.yaw; return Math.atan2(Math.sin(d), Math.cos(d)); };
   if (e.freezeT > 0){ e.freezeT -= dt; e.st -= dt; return; }
   if (e.state === 'backstep'){ // ① 뒤로 크게 뛰어 물러남 (칼은 기본 자세 그대로)
     const k = Math.min(1, t/KG.back), mv = KG.backDist*(easeOut(k) - easeOut(Math.max(0, (t - dt)/KG.back)));
@@ -3117,31 +3126,45 @@ function knightClose(e, dt, p){
     e.rig.position.y += Math.sin(Math.min(1, k/.8)*Math.PI)*.22;                               // 뛰어오름
     knightHoldT(e, KH_STANCE(), 0);
     if (k >= 1){ e.state = 'raise'; e.st = 0; sfx.execLand(); shakeT = Math.max(shakeT, .1); }
-  } else if (e.state === 'raise'){ // ② 칼을 머리 위로 치켜들며 상체를 젖혀 힘을 모음 (신중하게)
-    const k = easeIO(Math.min(1, t/KG.raise));
-    knightBody(e, kbBlend(KB_G.land, KB_G.raise, k), Math.min(1, dt*14));
-    knightHoldT(e, khBlend(KH_STANCE(), KH_G.over, k), 0);
-    if (t >= KG.raise){ e.state = 'smash'; e.st = 0; e.smashYaw = e.yaw; sfx.bossSwing(.7); }
-  } else if (e.state === 'smash'){ // ③ 골반 → 어깨 → 칼 순서로 내려찍음 (칼은 가속하며)
-    const kp = easeIO(clamp(t/(KG.smash*.7), 0, 1)), ks = easeIn(clamp((t - .03)/(KG.smash*.8), 0, 1));
-    knightBody(e, kbBlend(KB_G.raise, KB_G.smash, kp), 1);
-    knightHoldT(e, khBlend(KH_G.over, KH_G.ground, ks), 0);
-    if (ks >= 1){ // 땅을 벰: 칼끝 자리에서 충격파가 플레이어 쪽으로
-      e.g.updateMatrixWorld(true);
+  } else if (e.state === 'raise'){ // ② 칼을 오른쪽 어깨 위로 끌어올리며 몸을 오른쪽으로 감음 (신중하게)
+    const k = easeIO(Math.min(1, t/KG.raise)), b = kbBlend(KB_G.land, KB_G.raise, k);
+    knightBody(e, b, Math.min(1, dt*14));
+    knightHoldT(e, khBlend(KH_STANCE(), KH_G.over, k), (b.py + b.cy)*.6);
+    if (t >= KG.raise){ e.state = 'smash'; e.st = 0; e.hitDone = false; sfx.bossSwing(.7); }
+  } else if (e.state === 'smash'){ // ③ 골반 → 어깨 → 칼 순서로 풀며 앞쪽 땅을 비스듬히 베어 지나감
+    const kp = easeIO(clamp(t/(KG.smash*.6), 0, 1)), kc = easeIO(clamp((t - .03)/(KG.smash*.65), 0, 1));
+    const ks = easeIn(clamp((t - .05)/(KG.smash*.8), 0, 1));                                   // 칼은 가장 늦게, 가속하며
+    const bp = kbBlend(KB_G.raise, KB_G.cut, kp), bc = kbBlend(KB_G.raise, KB_G.cut, kc);
+    const b = {...bp, ct:bc.ct, cy:bc.cy}; knightBody(e, b, 1);
+    const h = ks < KG.impact ? khBlend(KH_G.over, KH_G.ground, ks/KG.impact) : khBlend(KH_G.ground, KH_G.past, (ks - KG.impact)/(1 - KG.impact));
+    knightHoldT(e, h, (b.py + b.cy)*.6);
+    knightTrail(e, ks > .05, dt);
+    if (!e.hitDone && ks >= KG.impact){ // 칼끝이 땅에 닿는 순간: 그 자리에서 플레이어 쪽으로 부채꼴 충격파
+      e.hitDone = true; e.g.updateMatrixWorld(true);
       const tip = e.kSword.localToWorld(new THREE.Vector3(0, -2.2, 0));
-      spawnKnightWave(tip.x, tip.z, e.yaw);
-      e.freezeT = .06; shakeT = Math.max(shakeT, .45); e.state = 'stuck'; e.st = 0;
+      let ay = Math.atan2(p.x - tip.x, p.z - tip.z), dy = ay - e.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      spawnKnightWave(tip.x, tip.z, e.yaw + clamp(dy, -.5, .5));                             // 기사 정면에서 너무 벗어나지 않게
+      e.freezeT = .06; shakeT = Math.max(shakeT, .45);
     }
-  } else if (e.state === 'stuck'){ // ④ 칼이 땅에 박힌 채 잠깐 (반동으로 상체가 살짝 튕김)
-    const b = kbBlend(KB_G.smash, KB_G.smash, 0); b.ct -= Math.sin(Math.min(1, t/KG.stuck)*Math.PI)*.08;
-    knightBody(e, b, Math.min(1, dt*20)); knightHoldT(e, KH_G.ground, 0);
-    if (t >= KG.stuck){ e.state = 'pull'; e.st = 0; }
-  } else if (e.state === 'pull'){ // ⑤ 칼을 뽑으며 무게중심을 되찾아 기본 자세로
+    if (ks >= 1){ e.state = 'stuck'; e.st = 0; }
+  } else if (e.state === 'stuck'){ // ④ 멈추지 않고 관성으로 왼쪽 아래까지 흘림 (점점 느려짐)
+    const k = easeOut(Math.min(1, t/KG.stuck)), b = kbBlend(KB_G.cut, KB_G.past, k);
+    knightBody(e, b, Math.min(1, dt*18));
+    knightHoldT(e, khBlend(KH_G.past, {grip:KH_G.past.grip.clone().add(new THREE.Vector3(-.1, -.05, -.15)), dir:new THREE.Vector3(-.88, -.35, .2)}, k), (b.py + b.cy)*.6);
+    knightTrail(e, k < .4, dt);
+    if (t >= KG.stuck){ e.state = 'pull'; e.st = 0; e.pullFrom = {b, h:{grip:KH_G.past.grip.clone().add(new THREE.Vector3(-.1, -.05, -.15)), dir:new THREE.Vector3(-.88, -.35, .2)}, y:(b.py + b.cy)*.6}; }
+  } else if (e.state === 'pull'){ // ⑤ 무게중심을 되찾으며 기본 자세로 (끊기지 않게)
     const k = easeIO(Math.min(1, t/KG.pull));
-    knightBody(e, kbBlend(KB_G.smash, KB.stance, k), Math.min(1, dt*14));
-    knightHoldT(e, khBlend(KH_G.ground, KH_STANCE(), k), 0);
+    knightBody(e, kbBlend(e.pullFrom.b, KB.stance, k), Math.min(1, dt*14));
+    knightHoldT(e, khBlend(e.pullFrom.h, KH_STANCE(), k), e.pullFrom.y*(1 - k));
+    knightTrail(e, false, dt);
     if (t >= KG.pull){ e.state = 'guard'; e.st = .8; e.atkCd = KG.cd; }
   }
+}
+function knightPauldrons(e){ // 어깨 갑옷이 위팔 회전의 절반쯤을 따라감 (팔을 들어도 갑옷을 뚫지 않게)
+  if (!e.kPaul) return;
+  e.kPaul[0].quaternion.copy(new THREE.Quaternion().slerp(e.armL.quaternion, .5));
+  e.kPaul[1].quaternion.copy(new THREE.Quaternion().slerp(e.armR.quaternion, .5));
 }
 function updateKnight(e, dt, p){
   e.t += dt; e.st += dt;
@@ -3201,6 +3224,7 @@ function updateKnight(e, dt, p){
     else if (s2 >= 1 && dist > KC.near) knightStep(e, dt, p, KC.walk);                                     // 너무 멀지 않으면 천천히 다가섬
   } else if (['backstep', 'raise', 'smash', 'stuck', 'pull'].includes(e.state)) knightClose(e, dt, p);
   else knightCharge(e, dt, p, f);
+  knightPauldrons(e);
   updateBossBar(e);
 }
 function updateBoss(e, dt, p, dist, canSee){
@@ -3244,7 +3268,7 @@ function animateBoss(e, dt){
 function resetBoss(){
   if (droppedShield){ scene.remove(droppedShield); droppedShield = null; }
   rbullets.forEach(b => scene.remove(b.m)); rbullets.length = 0;
-  bossFx.forEach(f => scene.remove(f.m)); bossFx.length = 0; knightWaves.length = 0;
+  bossFx.forEach(f => scene.remove(f.m)); bossFx.length = 0; clearKnightWaves();
   bossTeleg.visible = false; $('bossBar').classList.add('hide'); $('bossBar').classList.remove('enraged'); $('bossBar').querySelector('.bn').textContent = '철의 거인';
   slowT = 0; shakeT = 0; $('slowFx').style.opacity = 0;
 }
