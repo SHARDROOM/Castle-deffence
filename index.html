@@ -241,7 +241,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · d55955</div>
+<div id="buildVer" class="hud">v2026.11.05 · 4e0e5a</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -1962,7 +1962,8 @@ function makeSoldier(type){
     const MF = c => { const m = new THREE.MeshLambertMaterial({color:c, flatShading:true}); mats.push(m); return m; }; // 면마다 빛이 달라 깎은 금속처럼 보임
     const gold = MF(0xd4a640), goldD = MF(0x9c7424), goldL = MF(0xf0cf72), goldS = MF(0xd4a640), goldSD = MF(0x9c7424), black = M(0x14100c), leather = M(0x3a2414), steelK = M(0xd7dce2);
     goldS.side = goldSD.side = THREE.DoubleSide; // 어깨 겹판 안쪽이 비쳐 보이지 않게
-    const SPH = new THREE.SphereGeometry(1, 16, 12), DOME = new THREE.SphereGeometry(1, 16, 8, 0, Math.PI*2, 0, Math.PI/2), RIM = new THREE.TorusGeometry(1, .06, 6, 20);
+    // 면 수를 적게(팔각) 해서 둥근 부피는 살리되 모서리가 각지게 깎인 판금으로
+    const SPH = new THREE.SphereGeometry(1, 8, 6), DOME = new THREE.SphereGeometry(1, 8, 3, Math.PI/8, Math.PI*2, 0, Math.PI/2), RIM = new THREE.TorusGeometry(1, .06, 4, 8);
     const ell = (parent, geo, mat, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0, head) => { const m = add(parent, geo, mat, x, y, z, head); m.scale.set(sx, sy, sz); m.rotation.set(rx, ry, rz); return m; };
     // 투구: 약간 길쭉한 팔각 원통 + 평평한 윗면, 십자 눈구멍
     const helm = new THREE.Mesh(new THREE.CylinderGeometry(.235, .245, .56, 8), gold); helm.position.set(0, .25, 0); helm.rotation.y = Math.PI/8; helm.userData.head = true; neck.add(helm); parts.push(helm);
