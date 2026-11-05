@@ -241,7 +241,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · a33a17</div>
+<div id="buildVer" class="hud">v2026.11.05 · c29fc8</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3266,6 +3266,7 @@ function knightClose(e, dt, p){
 // (착지 일격은 패리 강도가 KX.breakPow보다 낮으면 패리가 깨짐) → xland: 착지 충격을 받아내며 일어나 기본 자세로
 const KX = {wind:.42, slash:.28, spin:.62, crouch:.3, rise:.62, hover:.42, dive:.42, land:.8, cd:4.6,
             h:12, reach:6.4, dmg1:22, dmg2:22, dmg3:34, breakPow:130};
+const KX_TMP = new THREE.Vector3();
 const KH_X = {
   spinOut:{grip:new THREE.Vector3(.48, 1.32, .58), dir:new THREE.Vector3(.95, -.05, .3)},   // 수평으로 오른쪽 바깥으로 뻗은 칼 (돌며 휩씀)
 };
@@ -3335,7 +3336,7 @@ function knightCombo(e, dt, p){
     const R = KX.rise, H = KX.hover, Dv = KX.dive;
     // 착지점은 체공 중까지 플레이어를 조금 따라감
     if (e.state !== 'dive'){ const dx = p.x - e.jFrom.x, dz = p.z - e.jFrom.z, d = Math.hypot(dx, dz) || 1, land = Math.max(0, d - (e.r + 2.2));
-      e.jTo.lerp(new THREE.Vector3(clamp(e.jFrom.x + dx/d*land, -A + 2, A - 2), 0, clamp(e.jFrom.z + dz/d*land, -A + 2, A - 2)), kDamp(4, dt)); faceP(8); }
+      e.jTo.lerp(KX_TMP.set(clamp(e.jFrom.x + dx/d*land, -A + 2, A - 2), 0, clamp(e.jFrom.z + dz/d*land, -A + 2, A - 2)), kDamp(4, dt)); faceP(8); } // 매 프레임 새로 만들지 않게 재사용
     let hx, y, b, h;
     if (e.state === 'rise'){
       const k = Math.min(1, t/R); y = KX.h*easeOut(k); hx = .35*easeOut(k);
