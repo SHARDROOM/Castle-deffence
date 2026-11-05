@@ -246,7 +246,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 4fa8ca</div>
+<div id="buildVer" class="hud">v2026.11.05 · 01f944</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3180,13 +3180,14 @@ function spawnKnightWave(x, z, yawT, r0 = 0, tip = null){ // (x, z) = 호의 중
   geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array((KW_SEG + 1)*2*2), 2));
   for (let i = 0; i < KW_SEG; i++){ const a = i*2, b = a + 1, c = a + 2, d = a + 3; idx.push(a, b, c, b, d, c); }
   geo.setIndex(idx);
-  const crackM = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:crackTexture(), transparent:true, depthWrite:false, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-2}));
+  const holy = sanctOn(); // 성역이 켜져 있으면 금빛 파동
+  const crackM = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:crackTexture(), color:holy ? 0xffd36a : 0xffffff, transparent:true, depthWrite:false, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-2}));
   crackM.position.set(x, .045, z); crackM.frustumCulled = false; scene.add(crackM);
   // 맨 앞의 빛나는 호
-  const ag = new THREE.RingGeometry(.92, 1, 32, 1, -W.half, W.half*2); ag.rotateX(-Math.PI/2);
-  const arc = new THREE.Mesh(ag, new THREE.MeshBasicMaterial({color:0xffb070, transparent:true, opacity:.85, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide}));
+  const ag = new THREE.RingGeometry(holy ? .84 : .92, 1, 32, 1, -W.half, W.half*2); ag.rotateX(-Math.PI/2); // 금빛 파동은 앞쪽 빛 띠가 더 두꺼움
+  const arc = new THREE.Mesh(ag, new THREE.MeshBasicMaterial({color:holy ? 0xffe27a : 0xffb070, transparent:true, opacity:.85, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide}));
   arc.position.set(x, .06, z); arc.rotation.y = yawT - Math.PI/2; scene.add(arc);
-  knightWaves.push({x, z, yaw:yawT, r0, d:r0, crackM, arc, puff:0, hit:false, life:W.linger});
+  knightWaves.push({x, z, yaw:yawT, r0, d:r0, crackM, arc, puff:0, hit:false, life:W.linger, holy});
   setWaveFan(knightWaves[knightWaves.length - 1], r0 + .01);
   sfx.bossSlam(); crackRing(tip ? tip.x : x, tip ? tip.z : z);
 }
@@ -3205,8 +3206,13 @@ function updateKnightWaves(dt){
     const w = knightWaves[i], d0 = w.d;
     if (w.d < W.len + w.r0){ // 퍼지는 중 (시작 호에서 W.len만큼)
       w.d = Math.min(W.len + w.r0, w.d + W.speed*dt); setWaveFan(w, w.d);
-      w.arc.scale.set(Math.max(.01, w.d), 1, Math.max(.01, w.d)); w.arc.material.opacity = .85*(1 - (w.d - w.r0)/W.len);
-      w.puff -= dt; if (w.puff <= 0){ w.puff = .05; const a = w.yaw + (Math.random() - .5)*2*W.half; groundBurst(w.x + Math.sin(a)*w.d, w.z + Math.cos(a)*w.d, 2, 1); } // 호를 따라 흙·돌이 튐
+      w.arc.scale.set(Math.max(.01, w.d), 1, Math.max(.01, w.d)); w.arc.material.opacity = (w.holy ? 1 : .85)*(1 - (w.d - w.r0)/W.len);
+      w.puff -= dt; if (w.puff <= 0){ w.puff = .05; const a = w.yaw + (Math.random() - .5)*2*W.half; groundBurst(w.x + Math.sin(a)*w.d, w.z + Math.cos(a)*w.d, 2, 1); // 호를 따라 흙·돌이 튐
+        if (w.holy) for (let j = 0; j < 3; j++){ // 금빛 파동: 호를 따라 금빛 알갱이가 솟음
+          const aj = w.yaw + (Math.random() - .5)*2*W.half, m = new THREE.Mesh(new THREE.BoxGeometry(.12, .12, .12), new THREE.MeshBasicMaterial({color:j % 2 ? 0xffe27a : 0xfff6cf, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false}));
+          m.position.set(w.x + Math.sin(aj)*w.d, .2, w.z + Math.cos(aj)*w.d); scene.add(m);
+          bits.push({m, v:new THREE.Vector3((Math.random() - .5)*2, 5 + Math.random()*4, (Math.random() - .5)*2), life:.6});
+        } }
       // 맨 앞(호)이 플레이어 자리를 지나는 순간: 부채꼴 안, 땅에 있으면 맞음 (구르기·점프로 피함, 패링 불가)
       const rx = pp.x - w.x, rz = pp.z - w.z, rd = Math.hypot(rx, rz);
       let da = Math.atan2(rx, rz) - w.yaw; da = Math.abs(Math.atan2(Math.sin(da), Math.cos(da)));
