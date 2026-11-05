@@ -138,3 +138,13 @@ test('도둑이 나오면 알림 명령도 함께', () => {
   const d = Waves.create({ rng: () => 0 }); d.start([]); d.wave = 3; d.thiefTimer = 0;
   assert.deepEqual(d.tick(0.01, []), [{ type: 'spawn', kind: 'thief' }, { type: 'thiefNotice' }]);
 });
+
+test('start(enemies, startWave): 테스트 모드에서 고른 웨이브부터 시작', () => {
+  const d = Waves.create({ rng: () => 0.5 });
+  const cmds = d.start([], 10);
+  assert.equal(d.wave, 10);
+  assert.equal(cmds.find(c => c.type === 'waveStart').wave, 10);
+  assert.ok(cmds.some(c => c.type === 'waveBanner' && c.wave === 10));
+  d.start([]); assert.equal(d.wave, 1); // 생략하면 1
+  d.start([], 0); assert.equal(d.wave, 1); // 이상한 값은 1
+});

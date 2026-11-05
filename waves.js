@@ -72,10 +72,11 @@
       wave: 1,
       nextWaveIn: null,   // 다음 웨이브까지 남은 게임 시간. null = 예약 없음
       thiefTimer: FIRST_THIEF,
-      // 새 판: 웨이브 1부터. 이전 판의 예약은 모두 사라진다.
-      start(enemies) {
-        d.wave = 1; d.nextWaveIn = null; d.thiefTimer = FIRST_THIEF;
-        return waveCommands(1, enemies, rng);
+      // 새 판: 웨이브 startWave(기본 1, 테스트 모드에선 고른 웨이브)부터. 이전 판의 예약은 모두 사라진다.
+      start(enemies, startWave = 1) {
+        const w = Math.max(1, Math.floor(startWave) || 1);
+        d.wave = w; d.nextWaveIn = null; d.thiefTimer = FIRST_THIEF;
+        return waveCommands(w, enemies, rng);
       },
       // 도둑을 뺀 적이 모두 사라졌을 때. 다음 웨이브를 예약한다.
       waveCleared() { d.nextWaveIn = CLEAR_DELAY; },

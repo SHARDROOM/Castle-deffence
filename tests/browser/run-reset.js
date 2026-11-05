@@ -82,6 +82,7 @@ async function record(mode) {
   if (mode === 'second') {
     await p.evaluate(() => { for (let i = 0; i < 5; i++) document.getElementById('gear').click(); }); // 테스트 모드: 골드로 상점 구매
     await sleep(200); await p.evaluate(() => document.getElementById('closeSet').click());
+    await p.evaluate(() => document.getElementById('twOk').click()); // 테스트 모드 시작 웨이브 창: 그대로 확인 (웨이브는 아래 __run1Wave로 정함)
     await p.evaluate(() => { window.__run1Wave = 10; window.__god = true; });
     await p.click('#startBtn'); await sleep(300); await card(); await p.click('#goBtn'); await sleep(800);
     await sleep(25000); // 광폭화 보스가 돌진·도약하며 엄폐물을 부숨
@@ -111,6 +112,7 @@ async function record(mode) {
   } else {
     await p.evaluate(() => { for (let i = 0; i < 5; i++) document.getElementById('gear').click(); }); // 두 번째 판과 같은 조건 (테스트 모드)
     await sleep(200); await p.evaluate(() => document.getElementById('closeSet').click());
+    await p.evaluate(() => document.getElementById('twOk').click()); // 시작 웨이브 창: 그대로 확인 (웨이브 1)
     await p.evaluate(() => { window.__armRecord = true; });
     await p.click('#startBtn'); await sleep(300); await card(); await p.click('#goBtn');
   }
