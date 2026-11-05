@@ -236,7 +236,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · f25030</div>
+<div id="buildVer" class="hud">v2026.11.05 · c9f460</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -292,7 +292,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
   <div class="shopTop"><h2>상점</h2><div id="shopGold">0 G</div><button id="shopClose">닫기</button></div>
   <div class="shopTabs"><button data-tab="parts" class="on">무기 개조</button><button data-tab="items">회복템</button></div>
   <div id="itemsPanel" class="hide"></div>
-  <div id="shopStage"><div id="slotLayer"></div><div id="shopGunName"></div><div id="shopHint">드래그해서 돌려 보기 · 두 번 눌러 원래대로</div></div>
+  <div id="shopStage"><div id="slotLayer"></div><div id="shopGunName"></div><div id="shopHint">누른 채 드래그해서 돌려 보기 · 두 손가락으로 확대</div></div>
   <div class="shopBottom"><div id="shopList"></div><div id="shopStats"></div></div>
 </div></div>
 <div id="over" class="screen hide"><div class="inner">
@@ -4459,38 +4459,45 @@ function rebuildShopGun(){ // 가운데 큰 총: 지금 미리보기 중인 부�
   shopView.camBase = dist; applyShopView(0); // 돌려 보던 각도·확대는 부품을 바꿔도 유지
 }
 const SLOT_TOP = {scope:1, conv:1, stock:1, soul:1, blade:1, skill:1, ammo:1, supp:1, side:1};
-// ---------- 상점 미리보기: 드래그로 돌려 보기, 휠·두 손가락으로 확대, 두 번 눌러 원래대로 ----------
-const shopView = {yaw:0, pitch:0, zoom:1, touched:false, camBase:null};
-function resetShopView(){ shopView.yaw = 0; shopView.pitch = 0; shopView.zoom = 1; shopView.touched = false; }
-function applyShopView(dt){ // 건드리기 전엔 살짝 흔들리고, 건드린 뒤엔 돌려 둔 그대로
+// ---------- 상점 미리보기: 누르고 있는 동안 드래그로 돌려 보기, 휠·두 손가락으로 확대, 놓으면 원래대로 ----------
+const shopView = {yaw:0, pitch:0, zoom:1, held:false, wheelT:0, swayK:1, camBase:null};
+function resetShopView(){ shopView.yaw = 0; shopView.pitch = 0; shopView.zoom = 1; shopView.held = false; shopView.wheelT = 0; shopView.swayK = 1; }
+function applyShopView(dt){ // 잡고 돌리는 동안만 그 각도·확대, 손을 떼면 기본 자세로 부드럽게 돌아가 다시 살짝 흔들림
   if (!shopGun) return;
-  const sway = shopView.touched ? 0 : Math.sin(shopT*.6)*.16;
+  if (shopView.wheelT > 0) shopView.wheelT -= dt;
+  const busy = shopView.held || shopView.wheelT > 0;
+  if (!busy){
+    const k = 1 - Math.exp(-dt*7);
+    shopView.yaw = Math.atan2(Math.sin(shopView.yaw), Math.cos(shopView.yaw)); // 여러 바퀴 돌렸어도 가까운 쪽으로 돌아옴
+    shopView.yaw -= shopView.yaw*k; shopView.pitch -= shopView.pitch*k; shopView.zoom += (1 - shopView.zoom)*k;
+  }
+  shopView.swayK += ((busy ? 0 : 1) - shopView.swayK)*Math.min(1, dt*(busy ? 12 : 2)); // 흔들림은 잡으면 바로 멈추고, 놓으면 천천히 돌아옴
+  const sway = Math.sin(shopT*.6)*.16*shopView.swayK;
   shopGun.rotation.set(shopView.pitch, shopView.yaw + sway, 0, 'YXZ');
   if (shopView.camBase){ const d = shopView.camBase*shopView.zoom; shopCam.position.set(d, d*.08, 0); shopCam.lookAt(0, 0, 0); }
 }
 {
-  const st = $('shopStage'), ptrs = new Map(); let pinch = 0, lastTap = 0;
+  const st = $('shopStage'), ptrs = new Map(); let pinch = 0;
   st.addEventListener('pointerdown', e => {
     if (e.target.closest('.slotBtn')) return;           // 칸 버튼은 그대로 누름
     try { st.setPointerCapture(e.pointerId); } catch (er) {}
-    ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY}); st.classList.add('drag');
+    ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY}); st.classList.add('drag'); shopView.held = true;
     if (ptrs.size === 2){ const [a, b] = [...ptrs.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
-    const now = performance.now(); if (ptrs.size === 1 && now - lastTap < 300){ resetShopView(); lastTap = 0; } else lastTap = now; // 두 번 누르기
   });
   st.addEventListener('pointermove', e => {
     const p = ptrs.get(e.pointerId); if (!p) return;
     if (ptrs.size === 1){ // 한 손가락·마우스: 돌리기
-      shopView.yaw += (e.clientX - p.x)*.012; shopView.pitch = clamp(shopView.pitch + (e.clientY - p.y)*.012, -1.2, 1.2); shopView.touched = true;
+      shopView.yaw += (e.clientX - p.x)*.012; shopView.pitch = clamp(shopView.pitch + (e.clientY - p.y)*.012, -1.2, 1.2);
     }
     p.x = e.clientX; p.y = e.clientY;
     if (ptrs.size === 2){ // 두 손가락: 확대·축소
       const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
-      if (pinch > 0){ shopView.zoom = clamp(shopView.zoom*pinch/d, .45, 1.6); shopView.touched = true; } pinch = d;
+      if (pinch > 0) shopView.zoom = clamp(shopView.zoom*pinch/d, .45, 1.6); pinch = d;
     }
   });
-  const up = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = 0; if (!ptrs.size) st.classList.remove('drag'); };
+  const up = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = 0; if (!ptrs.size){ st.classList.remove('drag'); shopView.held = false; } }; // 다 떼면 기본 자세로 돌아감
   st.addEventListener('pointerup', up); st.addEventListener('pointercancel', up);
-  st.addEventListener('wheel', e => { e.preventDefault(); shopView.zoom = clamp(shopView.zoom*Math.exp(e.deltaY*.0012), .45, 1.6); shopView.touched = true; }, {passive:false});
+  st.addEventListener('wheel', e => { e.preventDefault(); shopView.zoom = clamp(shopView.zoom*Math.exp(e.deltaY*.0012), .45, 1.6); shopView.wheelT = .8; }, {passive:false}); // 휠 확대는 멈추고 0.8초 뒤 돌아감
 }
 function positionSlots(){ // 칸 이름표는 위·아래 가장자리에 두고, 총의 해당 위치까지 선을 그음
   const st = $('shopStage'), w = st.clientWidth, h = st.clientHeight;
