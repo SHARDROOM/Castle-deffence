@@ -246,7 +246,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 803dda</div>
+<div id="buildVer" class="hud">v2026.11.05 · 318492</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3276,7 +3276,7 @@ function knightClose(e, dt, p){
 // x2: 그 힘으로 멈추지 않고 한 바퀴 돌며 수평으로 한 번 더 벰 → crouch: 웅크림 → rise: 하늘 높이(12m) 뛰어오르며 칼을 오른쪽 어깨 위로 →
 // hover: 잠깐 떠서 플레이어를 내려다봄 → dive: 몸 전체를 앞으로 기울여 사선으로 플레이어에게 떨어지며 사선으로 베어 착지
 // (착지 일격은 패리 강도가 KX.breakPow보다 낮으면 패리가 깨짐) → xland: 착지 충격을 받아내며 일어나 기본 자세로
-const KX = {wind:.42, slash:.28, spin:.62, crouch:.3, rise:.62, hover:.42, dive:.42, land:.8, cd:4.6,
+const KX = {wind:.42, slash:.28, spin:.62, crouch:.3, rise:.62, hover:.42, dive:.42, land:.8, cd:4.6, end:.75, cd1:2.4, cd2:3.2, // end: 짧은 변형(1·2타에서 끝)의 마무리, cd1·cd2: 그 뒤 쉬는 시간
             h:12, reach:6.4, dmg1:22, dmg2:22, dmg3:34, breakPow:130};
 const KX_TMP = new THREE.Vector3();
 const KH_X = {
@@ -3315,6 +3315,7 @@ function knightCombo(e, dt, p){
     knightBody(e, b, kDamp(16, dt)); knightHoldT(e, khBlend(KH_STANCE(), KH.coil, k), bodyYaw(e));
     knightTrail(e, false, dt);
     if (t >= KX.wind){ e.state = 'x1'; e.st = 0; e.hitDone = false; sfx.bossSwing(.6); }
+    if (!e.xLen) e.xLen = Math.random() < .8 ? 3 : Math.random() < .5 ? 1 : 2; // 80%: 도약까지, 나머지는 한 번 베고 끝 / 두 번 베고 끝
   } else if (e.state === 'x1'){ // ② 어깨 위에서 내리치듯 오른쪽 아래로 벰 (골반 → 어깨 → 칼 순서)
     knightLunge(e, dt, p, 9*(1 - Math.min(1, t/KX.slash)));
     const kp = easeIO(clamp(t/(KX.slash*.6), 0, 1)), kc = easeIO(clamp((t - .03)/(KX.slash*.62), 0, 1)), ks = easeIn(clamp((t - .06)/(KX.slash*.6), 0, 1));
@@ -3323,7 +3324,8 @@ function knightCombo(e, dt, p){
     const h = khPath(ks); h.grip.z -= e.recoil*.12; knightHoldT(e, h, bodyYaw(e));
     knightTrail(e, ks > .05, dt);
     if (!e.hitDone && ks >= KC.impact){ e.hitDone = true; knightSwingHit(e, p, KX.dmg1); }
-    if (ks >= 1){ e.state = 'x2'; e.st = 0; e.hitDone = false; e.spin0 = e.yaw; sfx.bossSwing(.7); }
+    if (ks >= 1 && e.xLen === 1){ e.state = 'xend'; e.st = 0; e.xFrom = {b:KB.strike, h:KH.low, cd:KX.cd1}; }   // 변형: 한 번 베고 끝
+    else if (ks >= 1){ e.state = 'x2'; e.st = 0; e.hitDone = false; e.spin0 = e.yaw; sfx.bossSwing(.7); }
   } else if (e.state === 'x2'){ // ③ 그대로 한 바퀴 돌며 수평으로 한 번 더 벰 (돌기 시작은 베기가 끝난 방향에서 이어짐)
     const k = Math.min(1, t/KX.spin), ks = k < .5 ? easeIn(k*2)*.5 : .5 + easeOut((k - .5)*2)*.5; // 한 바퀴: 가속했다 감속
     e.yaw = e.spin0 + ks*Math.PI*2; g.rotation.y = e.yaw;                                     // 몸 전체가 오른쪽으로 한 바퀴
@@ -3333,7 +3335,8 @@ function knightCombo(e, dt, p){
     knightHoldT(e, h, bodyYaw(e));
     knightTrail(e, true, dt);
     if (!e.hitDone && ks >= .93){ e.hitDone = true; faceP(60); knightSwingHit(e, p, KX.dmg2); } // 다시 플레이어를 마주 볼 때 벰
-    if (k >= 1){ e.state = 'crouch'; e.st = 0; faceP(60); }
+    if (k >= 1 && e.xLen === 2){ e.state = 'xend'; e.st = 0; e.xFrom = {b:KB_X.spin, h:KH_X.spinOut, cd:KX.cd2}; } // 변형: 두 번 베고 끝
+    else if (k >= 1){ e.state = 'crouch'; e.st = 0; faceP(60); }
   } else if (e.state === 'crouch'){ // ④ 뛰기 직전 웅크려 힘을 모음
     faceP(10);
     const k = easeIO(Math.min(1, t/KX.crouch)), b = kbBlend(KB_X.spin, KB_X.crouch, k);
@@ -3379,7 +3382,14 @@ function knightCombo(e, dt, p){
     knightBody(e, kbBlend(KB_X.land, KB.stance, k), kDamp(14, dt));
     knightHoldT(e, khBlend(KH_G.past, KH_STANCE(), k), bodyYaw(e)*(1 - k));
     knightTrail(e, k < .2, dt);
-    if (t >= KX.land){ e.state = 'guard'; e.st = .8; e.atkCd = KX.cd; }
+    if (t >= KX.land){ e.state = 'guard'; e.st = .8; e.atkCd = KX.cd; e.xLen = 0; }
+  } else if (e.state === 'xend'){ // 짧은 변형의 마무리: 벤 기세를 흘리며 칼을 거둬 기본 자세로 (끊기지 않게)
+    faceP(4);
+    const k = easeIO(Math.min(1, t/KX.end)), F = e.xFrom;
+    knightBody(e, kbBlend(F.b, KB.stance, k), kDamp(14, dt));
+    knightHoldT(e, khBlend(F.h, KH_STANCE(), k), bodyYaw(e)*(1 - k));
+    knightTrail(e, k < .15, dt);
+    if (t >= KX.end){ e.state = 'guard'; e.st = .8; e.atkCd = F.cd; e.xLen = 0; }
   }
 }
 // ---------- 패링이 깨졌을 때: 칼이 날아가 바닥에 꽂힘 → 기사가 발로 차 넘어뜨림 → 사선 베기(현재 체력의 50%) → 일어나 칼을 되찾음 ----------
@@ -3755,15 +3765,15 @@ function updateKnight(e, dt, p){
     const sanctReady = !sanct && e.hp <= e.maxHp*KS.hpGate && !(e.sanctCd > 0);                          // 성역: 체력 80% 이하, 끝나고 35초 뒤 다시
     if (s2 >= 1 && e.atkCd <= 0 && sanctReady){ e.state = 'sstomp'; e.st = 0; e.hitDone = false; }        // 발을 굴러 성역 → 칼끝을 찍어 경기장 전체로
     else if (s2 >= 1 && e.atkCd <= 0 && dist > KC.far){ e.state = 'windup'; e.st = 0; }                     // 멀면: 칼을 왼쪽 어깨 뒤로 → 돌진 베기
-    else if (s2 >= 1 && e.atkCd <= 0 && Math.random() < .4){ e.state = 'backstep'; e.st = 0; sfx.unsheath(); } // 돌진 거리 안쪽 (같은 사거리): 40% 물러나며 피하고 → 땅을 베어 충격파
-    else if (s2 >= 1 && e.atkCd <= 0){ e.state = 'x1wind'; e.st = 0; }                                    //                            60% 내리치기 → 돌며 베기 → 도약 사선 베기
+    else if (s2 >= 1 && e.atkCd <= 0 && Math.random() < .3){ e.state = 'backstep'; e.st = 0; sfx.unsheath(); } // 돌진 거리 안쪽 (같은 사거리): 30% 물러나며 피하고 → 땅을 베어 충격파
+    else if (s2 >= 1 && e.atkCd <= 0){ e.state = 'x1wind'; e.st = 0; e.xLen = 0; }                        //                            70% 연속 베기 (내리치기 → 돌며 베기 → 도약 사선 베기, 가끔 1·2타에서 끝)
     else if (s2 >= 1 && dist > KC.near) mv = knightStep(e, dt, p, KC.walk);                                // 너무 멀지 않으면 천천히 다가섬
     if (s2 < 1) knightPose(e, P.point, P.stance, s2, f);                                                   // 가리키던 자세에서 기본 자세로
     else knightBody(e, knightWalkBody(e, mv, dt), kDamp(14, dt));                                     // 기본 자세 (걸으면 걷는 다리)
     e.chest.rotation.x += Math.sin(e.t*1.6)*.01; // 숨쉬기
     knightAim(e, 1, s2);
   } else if (['backstep', 'raise', 'smash', 'stuck', 'pull'].includes(e.state)) knightClose(e, dt, p);
-  else if (['x1wind', 'x1', 'x2', 'crouch', 'rise', 'hover', 'dive', 'xland'].includes(e.state)) knightCombo(e, dt, p);
+  else if (['x1wind', 'x1', 'x2', 'xend', 'crouch', 'rise', 'hover', 'dive', 'xland'].includes(e.state)) knightCombo(e, dt, p);
   else if (e.state === 'punish') knightPunish(e, dt, p);
   else if (['sstomp', 'stap', 'sflinch'].includes(e.state)) knightSanct(e, dt, p);
   else knightCharge(e, dt, p, f);
