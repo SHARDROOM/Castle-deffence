@@ -24,8 +24,9 @@ test('웨이브별 스폰 목록 (보스·비행선)', () => {
   ];
   for (const [w, n, boss, air] of table) {
     const cmds = Waves.waveCommands(w, [], rng99), sp = spawns(cmds);
-    assert.equal(sp.filter(k => k !== 'boss').length, n, `wave ${w} regular`);
-    assert.equal(sp.filter(k => k === 'boss').length, boss, `wave ${w} boss`);
+    const isBoss = k => k === 'boss' || k === 'knight'; // 15웨이브 보스는 왕국의 마지막 기사
+    assert.equal(sp.filter(k => !isBoss(k)).length, n, `wave ${w} regular`);
+    assert.equal(sp.filter(isBoss).length, boss, `wave ${w} boss`);
     assert.equal(of(cmds, 'airship').length, air, `wave ${w} airship`);
   }
 });
@@ -71,7 +72,8 @@ test('웨이브 알림', () => {
   assert.match(texts(6)[0], /깃발/);
   assert.match(texts(10)[0], /광폭화/);
   assert.deepEqual(texts(11).length, 1); assert.match(texts(11)[0], /비행선/);
-  assert.deepEqual(texts(15).length, 1); assert.match(texts(15)[0], /광폭화/);
+  assert.deepEqual(texts(15).length, 1); assert.match(texts(15)[0], /왕국의 마지막 기사/);
+  assert.match(texts(20)[0], /광폭화/);
 });
 
 // ---------- 진행 ----------
@@ -147,4 +149,12 @@ test('start(enemies, startWave): 테스트 모드에서 고른 웨이브부터 �
   assert.ok(cmds.some(c => c.type === 'waveBanner' && c.wave === 10));
   d.start([]); assert.equal(d.wave, 1); // 생략하면 1
   d.start([], 0); assert.equal(d.wave, 1); // 이상한 값은 1
+});
+
+test('15웨이브는 철의 거인 대신 왕국의 마지막 기사', () => {
+  const rng = () => 0.99, kinds = w => Waves.waveCommands(w, [], rng).filter(c => c.type === 'spawn').map(c => c.kind);
+  assert.ok(kinds(15).includes('knight')); assert.ok(!kinds(15).includes('boss'));
+  assert.ok(kinds(10).includes('boss')); assert.ok(kinds(20).includes('boss')); assert.ok(!kinds(20).includes('knight'));
+  const notes = Waves.waveCommands(15, [], rng).filter(c => c.type === 'notice').map(c => c.text);
+  assert.ok(notes.some(t => t.includes('왕국의 마지막 기사'))); assert.ok(!notes.some(t => t.includes('철의 거인')));
 });
