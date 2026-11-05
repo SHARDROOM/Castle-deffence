@@ -236,7 +236,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · a967bd</div>
+<div id="buildVer" class="hud">v2026.11.05 · dbc2af</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -4278,20 +4278,29 @@ sfxIn.onchange = () => sfx.hit();
 const sensIn = $('sensIn');
 sensIn.value = Math.round((settings.sens || 1)*100); $('sensOut').textContent = (sensIn.value/100).toFixed(1);
 // ---------- 자이로 조준: 폰의 회전 속도를 시점 회전으로 ----------
-let gyroLast = 0, gyroBound = false;
+let gyroPrev = null, gyroBound = false;
+// 자이로 조준: 회전 속도(devicemotion)는 브라우저마다 축 순서가 달라서(안드로이드 크롬에선 핸들처럼 돌려야 좌우가 돎),
+// 축이 표준대로 들어오는 기기 자세(deviceorientation)로 폰 뒤쪽 카메라가 보는 방향을 구하고, 그 변화만큼 시점을 돌림
+const GYRO_Q1 = new THREE.Quaternion(-Math.sqrt(.5), 0, 0, Math.sqrt(.5)), GYRO_Z = new THREE.Vector3(0, 0, 1);
+function gyroLook(e){ // 기기 자세 + 화면 방향 → 보는 방향의 {yaw, pitch} (라디안, 왼쪽·위가 +)
+  const R = Math.PI/180, ang = (screen.orientation && screen.orientation.angle != null) ? screen.orientation.angle : (window.orientation || 0);
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(e.beta*R, (e.alpha || 0)*R, -e.gamma*R, 'YXZ'));
+  q.multiply(GYRO_Q1); q.multiply(new THREE.Quaternion().setFromAxisAngle(GYRO_Z, -ang*R));
+  const f = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
+  return {yaw: Math.atan2(-f.x, -f.z), pitch: Math.asin(clamp(f.y, -1, 1))};
+}
 function gyroHandler(e){
-  if (!settings.gyro || state !== 'play' || paused || (settings.gyroAds && !scoped) || planted()) { gyroLast = 0; return; }
-  const r = e.rotationRate; if (!r) return;
-  const now = performance.now(), dt = gyroLast ? Math.min(.05, (now - gyroLast)/1000) : 0; gyroLast = now; if (!dt) return;
-  const ang = (screen.orientation && screen.orientation.angle != null) ? screen.orientation.angle : (window.orientation || 0);
-  const a = (r.alpha || 0), b = (r.beta || 0), g = (r.gamma || 0), D = Math.PI/180*dt; // 도/초 → 라디안
-  let dYaw, dPitch; // 화면 방향에 따라 축을 바꿈 (왼쪽으로 돌리면 +, 위로 들면 +)
-  // 상하: 안드로이드 크롬에서 위로 들면 시점이 내려가던 문제가 있어 부호를 뒤집음 (기기마다 다르면 설정의 상하·좌우 반전으로 맞춤)
-  if (ang === 90){ dYaw = b; dPitch = g; } else if (ang === 270 || ang === -90){ dYaw = -b; dPitch = -g; } else if (ang === 180){ dYaw = -g; dPitch = b; } else { dYaw = g; dPitch = -b; }
+  if (e.beta == null || e.gamma == null) return;
+  const cur = gyroLook(e), prev = gyroPrev; gyroPrev = cur;
+  if (!settings.gyro || state !== 'play' || paused || (settings.gyroAds && !scoped) || planted() || !prev) return;
+  let dYaw = cur.yaw - prev.yaw; dYaw = Math.atan2(Math.sin(dYaw), Math.cos(dYaw));
+  let dPitch = cur.pitch - prev.pitch;
+  if (Math.abs(cur.pitch) > 1.4) dYaw = 0;                 // 거의 바로 위·아래를 볼 땐 좌우 값이 불안정
+  if (Math.abs(dYaw) > .5 || Math.abs(dPitch) > .5) return; // 튀는 값(자세 표현이 바뀌는 순간 등)은 버림
   if (settings.gyroInvY) dPitch = -dPitch;
   if (settings.gyroInvX) dYaw = -dYaw;
   const k = (settings.gyroSens || 1)*(camera.fov/75)*(scoped ? (settings.scopeSens || 1) : 1);
-  yaw += dYaw*D*k; pitch = clamp(pitch + dPitch*D*k, -1.4, 1.4);
+  yaw += dYaw*k; pitch = clamp(pitch + dPitch*k, -1.4, 1.4);
 }
 let gyroSeen = false;
 const inFrame = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
@@ -4299,13 +4308,15 @@ function gyroFail(msg){ settings.gyro = false; $('gyroIn').checked = false; save
 $('gyroTabBtn').onclick = () => { const w2 = window.open(location.href, '_blank'); if (!w2) showNotice('이 화면에서는 새 탭을 열 수 없어요. 게임 파일을 직접 올린 주소에서 자이로를 쓸 수 있어요', 0xff8a6a); }; // 감싼 페이지 밖에서 게임만 열면 센서 권한을 받을 수 있음
 function enableGyro(){ // 반드시 터치(클릭) 처리 안에서 바로 불러야 아이폰이 권한 창을 띄움
   const bind = () => {
-    if (!gyroBound){ addEventListener('devicemotion', e => { if (e.rotationRate && (e.rotationRate.alpha != null || e.rotationRate.beta != null)) gyroSeen = true; gyroHandler(e); }); gyroBound = true; }
+    if (!gyroBound){ addEventListener('deviceorientation', e => { if (e.beta != null && e.gamma != null) gyroSeen = true; gyroHandler(e); }); gyroBound = true; }
     setTimeout(() => { if (settings.gyro && !gyroSeen) gyroFail(inFrame ? '이 페이지 안에서는 센서 신호가 막혀 있어요. 설정의 "게임만 새 탭으로 열기"를 눌러 주세요' : '이 기기에서 자이로 신호가 들어오지 않아요'); }, 1500);
   };
-  if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
-    let pr; try { pr = DeviceMotionEvent.requestPermission(); } catch (er){ gyroFail('권한 요청에 실패했어요. 다시 눌러 주세요'); return; }
+  const Req = (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') ? DeviceOrientationEvent
+            : (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') ? DeviceMotionEvent : null;
+  if (Req){
+    let pr; try { pr = Req.requestPermission(); } catch (er){ gyroFail('권한 요청에 실패했어요. 다시 눌러 주세요'); return; }
     pr.then(r => {
-      if (r === 'granted') bind();
+      if (r !== 'denied') bind(); // 'granted' 말고도 'prompt' 등을 돌려주는 브라우저가 있음: 거부가 아니면 일단 듣고, 신호가 안 오면 1.5초 뒤 알림
       else gyroFail(inFrame ? '이 페이지 안에서는 센서 권한이 막혀 있어요. 설정의 "게임만 새 탭으로 열기"를 눌러 주세요' : '권한이 거부됐어요. 페이지를 새로 고친 뒤 다시 켜고 "허용"을 눌러 주세요');
     }).catch(() => gyroFail('권한 요청에 실패했어요. 다시 눌러 주세요'));
   } else bind();
