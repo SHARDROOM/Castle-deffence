@@ -13,6 +13,7 @@
   const FIRST_THIEF = 60;           // 판 시작 후 첫 도둑 판정까지
   const isBossWave = w => w % 5 === 0;           // 5웨이브마다 철의 거인
   const isEnraged = w => Math.floor(w / 5) >= 2; // 10웨이브부터 광폭화한 철의 거인
+  const isKnightWave = w => w === 15;           // 15웨이브는 철의 거인 대신 왕국의 마지막 기사
 
   // 웨이브 시작 알림 (리팩터 전 startWave와 같은 순서)
   const NOTICES = [
@@ -20,7 +21,8 @@
     [w => w === 2, '구르며 피하는 암살자가 나타나요', 0xffd166],
     [w => w === 6, '깃발을 든 기수가 나타나요: 주변 적을 강화해요', 0x8fb8ff],
     [w => w === 3, '느리지만 단단한 중갑기사가 나타나요', 0xc9d0da],
-    [isBossWave, w => isEnraged(w) ? '광폭화한 철의 거인이 성문을 부수고 들어와요' : '철의 거인이 성문으로 들어와요', 0xff8a6a],
+    [w => isBossWave(w) && !isKnightWave(w), w => isEnraged(w) ? '광폭화한 철의 거인이 성문을 부수고 들어와요' : '철의 거인이 성문으로 들어와요', 0xff8a6a],
+    [isKnightWave, '왕국의 마지막 기사가 성문으로 들어와요', 0xffd166],
   ];
 
   // 일반 적 한 명의 종류. bannerCount = 지금 살아 있는 깃발 기수 수
@@ -58,7 +60,8 @@
       if (kind === 'banner') banners++;
       cmds.push({ type: 'spawn', kind });
     }
-    if (isBossWave(w)) cmds.push({ type: 'spawn', kind: 'boss' }, { type: 'bossRoar', enraged: isEnraged(w) });
+    if (isKnightWave(w)) cmds.push({ type: 'spawn', kind: 'knight' }, { type: 'bossRoar', enraged: false });
+    else if (isBossWave(w)) cmds.push({ type: 'spawn', kind: 'boss' }, { type: 'bossRoar', enraged: isEnraged(w) });
     for (let i = 0; i < airshipCount(w); i++) cmds.push({ type: 'airship' });
     for (const [when, text, color] of NOTICES) {
       if (when(w)) cmds.push({ type: 'notice', text: typeof text === 'function' ? text(w) : text, color });
@@ -101,7 +104,7 @@
     return d;
   }
 
-  const Waves = { create, waveCommands, pickType, regularCount, airshipCount, thiefCap, isBossWave, isEnraged, CLEAR_DELAY };
+  const Waves = { create, waveCommands, pickType, regularCount, airshipCount, thiefCap, isBossWave, isEnraged, isKnightWave, CLEAR_DELAY };
   if (typeof module !== 'undefined' && module.exports) module.exports = Waves;
   else root.Waves = Waves;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
