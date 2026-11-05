@@ -236,7 +236,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · fe370b</div>
+<div id="buildVer" class="hud">v2026.11.05 · 4146a9</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3429,12 +3429,72 @@ function startExec(e){
   e.groggyT = Math.max(e.groggyT, 1); firing = false;
   if (e.boss){ // 보스 전용 처형: 거인 정면 기준으로 위치를 잡음
     const p = yawObj.position, dx = p.x - e.g.position.x, dz = p.z - e.g.position.z, d = Math.hypot(dx, dz) || 1;
-    Object.assign(exec, {boss:true, fx:dx/d, fz:dz/d, d0:d, y:0, ev:0});
+    Object.assign(exec, {boss:true, fx:dx/d, fz:dz/d, d0:d, y:0, ev:0, rapier: !!W.rapier});
     e.react = 'pre'; e.reactT = 0;
   } else if (W.rapier) exec.rapier = true; // 레이피어: 머리 → 가슴 찌르고 다리 베기
 }
 // ---------- 보스 처형: 무릎을 밟고 뛰어올라 투구 틈에 꽂고, 비틀고, 내려오며 벰 (약 2.2초) ----------
+// ---------- 레이피어 보스 처형: 몸통 앞으로 뛰어올라, 양 어깨 → (숨 고르기) → 목 아래·몸통 아래를 찌르고,
+//            두 어깨를 잇는 가로 베기, 목 아래와 몸통 아래를 잇는 세로 베기로 십자를 새김 (약 2.6초) ----------
+// 찌를 곳은 거인의 실제 뼈 위치(양 어깨, 목, 엉덩이)에서 매 프레임 구함. 시간은 각 동작이 맞는 순간.
+const RB = {ls:.7, rs:.82, neck:1.3, low:1.42, hSlash:1.64, vSlash:1.92, land:2.3, end:2.6};
+const RB_DEF = {ls:{x:-.3, y:.2}, rs:{x:.3, y:.2}, neck:{x:0, y:.25}, low:{x:0, y:-.25}}; // 뼈를 못 읽을 때
+function rbTargets(e){ // 몸통 위 네 곳: 세계 좌표(w)와 화면 기준 방향(a: 조준점에서 x·y, 시선 거리 1 기준)
+  const W_ = k => e[k].getWorldPosition(new THREE.Vector3());
+  const sL = W_('armL'), sR = W_('armR'), nk = W_('neck'), hip = W_('thighL').add(W_('thighR')).multiplyScalar(.5);
+  const mid = sL.clone().add(sR).multiplyScalar(.5).add(hip).multiplyScalar(.5);
+  const w = {a: sL.lerp(nk, .2), b: sR.lerp(nk, .2), neck: nk.clone().lerp(mid, .25), low: hip.clone().lerp(nk, .15)};
+  camera.updateMatrixWorld();
+  const scr = v => { const c = v.clone().applyMatrix4(camera.matrixWorldInverse); return {x: c.x/Math.max(.1, -c.z), y: c.y/Math.max(.1, -c.z)}; };
+  const A = scr(w.a), B = scr(w.b), left = A.x <= B.x; // 화면 왼쪽 어깨부터
+  return {w: {ls: left ? w.a : w.b, rs: left ? w.b : w.a, neck: w.neck, low: w.low},
+          a: {ls: left ? A : B, rs: left ? B : A, neck: scr(w.neck), low: scr(w.low)}};
+}
+function updateRapierBossExec(dt){
+  const x = exec, e = x.e, p = yawObj.position, alive = enemies.includes(e);
+  x.t += dt; const t = x.t, S = e.def.scale, torsoY = 1.13*S, bx = e.g.position.x, bz = e.g.position.z, hang = torsoY - 1.6;
+  let dist;
+  if (t < .35){ dist = lerp(x.d0, 3.2, ease(t/.35)); x.y = 0; }                                                // 달려듦
+  else if (t < .6){ const k = (t - .35)/.25; dist = lerp(3.2, 2.6, k); x.y = lerp(0, hang, ease(k)) + Math.sin(k*Math.PI)*.3; } // 몸통 높이로 뛰어오름
+  else if (t < 2.02){ dist = 2.6; x.y = hang; }                                                                  // 몸통 앞에 떠서 찌르고 벰
+  else if (t < RB.land){ const k = (t - 2.02)/(RB.land - 2.02); dist = lerp(2.6, 3.3, k); x.y = lerp(hang, 0, k*k); } // 뒤로 물러나며 내려옴
+  else { dist = 3.3; x.y = 0; }
+  p.x = bx + x.fx*dist; p.z = bz + x.fz*dist;
+  const eye = x.y + 1.6, lookY = t < 2.02 ? torsoY : 1.1*S;
+  let d = Math.atan2(-(bx - p.x), -(bz - p.z)) - yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+  yaw += d*Math.min(1, dt*20);
+  pitch += (Math.atan2(lookY - eye, dist) - pitch)*Math.min(1, dt*14);
+  if (alive && e.armL && e.thighL) x.tg = rbTargets(e);
+  const at = key => x.tg ? x.tg.w[key].clone() : null;
+  if (!x.s1 && t >= .08){ x.s1 = true; sfx.execStep(); }
+  if (!x.s2 && t >= .22){ x.s2 = true; sfx.execStep(); }
+  if (!x.s3 && t >= .36){ x.s3 = true; sfx.execJump(); }
+  if (!x.s5 && t >= RB.land){ x.s5 = true; sfx.execLand(); }
+  const stab = (key, first) => { // 찌르기 한 번: 불꽃 + 피해
+    sfx.execPierce(); hitStopT = .05; shakeT = Math.max(shakeT, .12); if (x.tg) sparkAt(at(key));
+    if (enemies.includes(e)){ hitEnemy(e, 5, 'bossExec'); if (first){ e.react = 'stab'; e.reactT = 0; dropShield(e); sfx.clang(); sfx.bossRoar(); } }
+  };
+  if (x.ev === 0 && t >= RB.ls){ x.ev = 1; stab('ls', true); }
+  if (x.ev === 1 && t >= RB.rs){ x.ev = 2; stab('rs'); }
+  if (x.ev === 2 && t >= RB.neck){ x.ev = 3; stab('neck'); }
+  if (x.ev === 3 && t >= RB.low){ x.ev = 4; stab('low'); }
+  if (x.ev === 4 && t >= RB.hSlash){ // 가로 베기: 두 어깨를 이음
+    x.ev = 5; sfx.execSlash(); hitStopT = .07; shakeT = Math.max(shakeT, .3);
+    if (x.tg) for (let i = 0; i <= 4; i++) sparkAt(at('ls').lerp(at('rs'), i/4));
+    if (enemies.includes(e)) hitEnemy(e, 8, 'bossExec');
+  }
+  if (x.ev === 5 && t >= RB.vSlash){ // 세로 베기: 목 아래에서 몸통 아래까지 → 십자 완성, 무릎 꿇음
+    x.ev = 6; sfx.execSlash(); sfx.kneelThud(); hitStopT = .12; shakeT = Math.max(shakeT, .55);
+    if (x.tg) for (let i = 0; i <= 4; i++) sparkAt(at('neck').lerp(at('low'), i/4));
+    if (enemies.includes(e)){ burst(e, 0xffe08a, 12); hitEnemy(e, 12, 'bossExec', undefined, true); e.react = 'kneel'; e.reactT = 0; }
+  }
+  if (t >= RB.end){
+    exec = null; footY = 0;
+    if (enemies.includes(e)){ e.groggyT = 0; e.kneelT = 5; }
+  }
+}
 function updateBossExec(dt){
+  if (exec.rapier) return updateRapierBossExec(dt);
   const x = exec, e = x.e, p = yawObj.position, alive = enemies.includes(e);
   x.t += dt; const t = x.t, S = e.def.scale, headY = 1.74*S, bx = e.g.position.x, bz = e.g.position.z;
   let dist;
@@ -3615,7 +3675,25 @@ function animateSword(dt, dip){
   const RAP_IDLE = poseDir(.26, -.3 - dip*.3, -.55, [-.105, .121, -.987], [1, 0, 0]); // 레이피어 겨눔: 칼끝을 화면 가운데(조준점)로
   const idle = (W.rapier && swordOut) ? RAP_IDLE : W.great ? (swordOut ? Object.assign({}, GREAT_IDLE, {y:GREAT_IDLE.y - dip*.3}) : Object.assign({}, GREAT_BACK)) : swordOut ? {x:.34, y:-.44 - dip*.3, z:-.6, rx:-1.25, ry:-.1, rz:.2} : Object.assign({}, scabCur); // 뽑았으면 겨눈 자세, 아니면 칼집과 함께
   let T, snap = false;
-  if (exec && exec.boss){
+  if (exec && exec.boss && exec.rapier){ // 레이피어 보스 처형: 칼끝이 화면의 찌를 곳·벨 선을 따라감
+    const bl = (.19 + 1.05*(W.bladeScale || 1) + .075)*.8, P = exec.tg ? exec.tg.a : RB_DEF, t = exec.t;
+    const tipTo = (aim, hx, hy, hz) => { // 손(hx,hy,hz)에서 칼끝이 (aim.x, aim.y, -1) 시선 위에 오는 방향
+      const ux = aim.x, uy = aim.y, uu = ux*ux + uy*uy + 1, uh = ux*hx + uy*hy - hz, hh = hx*hx + hy*hy + hz*hz;
+      const D = (uh + Math.sqrt(Math.max(0, uh*uh - uu*(hh - bl*bl))))/uu;
+      return [ux*D - hx, uy*D - hy, -D - hz];
+    };
+    const at = (aim, hx, hy, hz, edge) => poseDir(hx, hy, hz, tipTo(aim, hx, hy, hz), edge || [0, 1, 0]);
+    const L = a => at(a, -.26 + a.x*.2, .02 + a.y*.2, -.46), X = a => at(a, -.05 + a.x*.25, -.085 + a.y*.25, -.78); // 당김 · 뻗음
+    const lp = (a, b, u) => ({x: lerp(a.x, b.x, u), y: lerp(a.y, b.y, u)});
+    const H = (u) => at(lp(P.ls, P.rs, u*1.3 - .15), lerp(-.3, .3, u), -.08, -.55, [1, 0, 0]);   // 가로 베기: 왼 어깨 → 오른 어깨 (조금 넘게)
+    const V = (u) => at(lp(P.neck, P.low, u*1.3 - .15), .04, lerp(.04, -.22, u), -.55, [0, -1, 0]); // 세로 베기: 목 아래 → 몸통 아래
+    const R = RB;
+    T = keyPose([[0, idle], [.5, L(P.ls)], [R.ls, X(P.ls)], [R.ls + .03, X(P.ls)], [R.rs - .05, L(P.rs)], [R.rs, X(P.rs)], [R.rs + .05, X(P.rs)],
+                 [R.neck - .14, L(P.neck)], [R.neck, X(P.neck)], [R.neck + .03, X(P.neck)], [R.low - .05, L(P.low)], [R.low, X(P.low)], [R.low + .04, X(P.low)],
+                 [R.hSlash - .1, H(0)], [R.hSlash, H(.6)], [R.hSlash + .05, H(1)], [R.hSlash + .1, H(1)],
+                 [R.vSlash - .12, V(0)], [R.vSlash, V(.6)], [R.vSlash + .05, V(1)], [R.vSlash + .14, V(1)], [R.end, idle]], t);
+    snap = true;
+  } else if (exec && exec.boss){
     const B2 = {x:.1, y:-.06, z:-.95, rx:-1.5, ry:.1, rz:.1}, B5 = {x:-.05, y:-.55, z:-.7, rx:-2.4, ry:0, rz:-.15};
     T = keyPose([[0, idle], [.35, {x:.3, y:-.3, z:-.55, rx:-1.0, ry:0, rz:.3}], [.7, {x:.3, y:-.12, z:-.42, rx:-.9, ry:0, rz:.45}],
                  [.85, B2], [1.0, B2], [1.3, {x:.1, y:-.06, z:-.88, rx:-1.5, ry:.1, rz:1.7}], [1.48, {x:.12, y:.32, z:-.5, rx:.35, ry:0, rz:0}],
