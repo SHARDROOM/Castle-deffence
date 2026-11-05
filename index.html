@@ -246,7 +246,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 94cd09</div>
+<div id="buildVer" class="hud">v2026.11.05 · df0541</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -2511,6 +2511,7 @@ function shoot(){
       const crit = h.object.userData.head === true;
       let d = W.dmg * (crit ? 2 : 1); // dmgMul은 Combat이 곱함
       if (W.falloff && h.distance > W.falloff) d *= 0.4;
+      if (e.type === 'knight') sparkAt(h.point); // 갑옷에 맞은 자리에 불꽃
       dmgMap.set(e, (dmgMap.get(e)||0) + d); anyHit = true; if (crit) anyCrit = true;
       if (crit && !critE){ critE = e; critP.copy(h.point); }
       if (crit && e.boss) bossHeadHit(e);
@@ -3803,6 +3804,7 @@ function updateKnight(e, dt, p){
   else if (['sstomp', 'stap', 'sflinch'].includes(e.state)) knightSanct(e, dt, p);
   else knightCharge(e, dt, p, f);
   knightPauldrons(e);
+  if (e.flash > 0){ e.flash -= dt; tint(e, 0xffffff); } else tint(e, 0x000000); // 피격: 하얗게 번쩍 (다른 적과 같게)
   updateBossBar(e);
 }
 function updateBoss(e, dt, p, dist, canSee){
