@@ -241,7 +241,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 2f2c5d</div>
+<div id="buildVer" class="hud">v2026.11.05 · 39644a</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -2966,10 +2966,19 @@ function knightStep(e, dt, p, speed){ // 플레이어 쪽으로 걸음 (경기�
   const mv = Math.min(speed*dt, Math.max(0, d - (e.r + 3)));
   g.position.x = clamp(g.position.x + dx/d*mv, -A + 2, A - 2); g.position.z = clamp(g.position.z + dz/d*mv, -A + 2, A - 2);
   BOSS_WORLD.collide(g.position, e.r);                                             // 소품·성벽에 막힘
-  e.walk = (e.walk || 0) + mv*2.2;
-  const sw = Math.sin(e.walk)*.35*Math.min(1, speed/2);                          // 다리를 앞뒤로
-  e.thighL.rotation.x += sw; e.thighR.rotation.x -= sw;
-  return mv;
+  return mv;                                                                        // 다리 동작은 knightWalkBody가 걸은 거리로 만듦
+}
+// 기본 자세로 걷기: 걸은 거리만큼 걸음이 진행됨(발이 미끄러지지 않게). 앞으로 나가는 다리는 무릎을 굽히고,
+// 두 발이 땅에 있을 때 몸이 살짝 내려가고, 골반은 걸음 따라 돌고 상체는 반대로. 걷기 시작·멈출 때 서서히 섞임
+const KN_STRIDE = .42;                                                              // 반 걸음 보폭 (몸 크기 기준)
+function knightWalkBody(e, mv, dt){
+  e.wph = (e.wph || 0) + mv/(KN_STRIDE*e.def.scale)*Math.PI;
+  e.walkAmp = lerp(e.walkAmp || 0, mv > 1e-4 ? 1 : 0, Math.min(1, dt*6));
+  const a = e.walkAmp, sn = Math.sin(e.wph), cs = Math.cos(e.wph), S = KB.stance;
+  return {pt:S.pt + a*.04, py:S.py + a*sn*.09, ct:S.ct + a*.03, cy:S.cy - a*sn*.07,
+          tL:lerp(S.tL, 0, a) - a*sn*.42, tR:lerp(S.tR, 0, a) + a*sn*.42,
+          kL:lerp(S.kL, .18, a) + a*Math.max(0, cs)*.65, kR:lerp(S.kR, .18, a) + a*Math.max(0, -cs)*.65,
+          drop:S.drop + a*.045*Math.abs(sn)};
 }
 // 기사 칼 잔상: 칼이 실제로 지나간 자리(칼 밑동~끝)를 따라 짧게 남김
 let kTrail = null;
@@ -3216,14 +3225,16 @@ function updateKnight(e, dt, p){
     if (t >= D.guard){ e.state = 'guard'; e.st = 0; e.kBlade.scale.y = 1; e.kSheath.position.copy(e.KS_POS); e.kSheath.rotation.copy(e.KS_ROT); }
   } else if (e.state === 'guard'){ // 가리킨 뒤 두 손으로 칼자루를 잡는 기본 자세. 멀면 돌진 베기, 아니면 천천히 다가섬
     const s2 = smooth(Math.min(1, t/.8));
-    knightPose(e, P.point, P.stance, s2, f);
-    e.chest.rotation.x += Math.sin(e.t*1.6)*.01; // 숨쉬기
-    knightAim(e, 1, s2);
     const dist = Math.hypot(p.x - g.position.x, p.z - g.position.z);
     e.atkCd = (e.atkCd ?? 1.2) - dt;
-    if (s2 >= 1 && e.atkCd <= 0 && dist > KC.far){ e.state = 'windup'; e.st = 0; }
-    else if (s2 >= 1 && e.atkCd <= 0 && dist < KG.close){ e.state = 'backstep'; e.st = 0; sfx.unsheath(); } // 가까우면: 물러나며 피하고 → 땅을 베어 충격파      // 멀면: 칼을 왼쪽 어깨 위로 → 돌진 베기
-    else if (s2 >= 1 && dist > KC.near) knightStep(e, dt, p, KC.walk);                                     // 너무 멀지 않으면 천천히 다가섬
+    let mv = 0;
+    if (s2 >= 1 && e.atkCd <= 0 && dist > KC.far){ e.state = 'windup'; e.st = 0; }                         // 멀면: 칼을 왼쪽 어깨 뒤로 → 돌진 베기
+    else if (s2 >= 1 && e.atkCd <= 0 && dist < KG.close){ e.state = 'backstep'; e.st = 0; sfx.unsheath(); } // 가까우면: 물러나며 피하고 → 땅을 베어 충격파
+    else if (s2 >= 1 && dist > KC.near) mv = knightStep(e, dt, p, KC.walk);                                // 너무 멀지 않으면 천천히 다가섬
+    if (s2 < 1) knightPose(e, P.point, P.stance, s2, f);                                                   // 가리키던 자세에서 기본 자세로
+    else knightBody(e, knightWalkBody(e, mv, dt), Math.min(1, dt*14));                                     // 기본 자세 (걸으면 걷는 다리)
+    e.chest.rotation.x += Math.sin(e.t*1.6)*.01; // 숨쉬기
+    knightAim(e, 1, s2);
   } else if (['backstep', 'raise', 'smash', 'stuck', 'pull'].includes(e.state)) knightClose(e, dt, p);
   else knightCharge(e, dt, p, f);
   knightPauldrons(e);
