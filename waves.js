@@ -10,6 +10,7 @@
   'use strict';
 
   const CLEAR_DELAY = 1.8;          // 웨이브 클리어 후 다음 웨이브까지 (초, 게임 시간)
+  const ENTRANCE = 3.6;             // 왕국의 마지막 기사 등장 연출(칼 뽑기) 동안 다른 적은 기다렸다가 나옴
   const FIRST_THIEF = 60;           // 판 시작 후 첫 도둑 판정까지
   const isBossWave = w => w % 5 === 0;           // 5웨이브마다 철의 거인
   const isEnraged = w => Math.floor(w / 5) >= 2; // 10웨이브부터 광폭화한 철의 거인
@@ -73,23 +74,40 @@
     return cmds;
   }
 
+  // 기사 웨이브: 기사부터 혼자 나와 등장 연출(bossEntrance)을 하고, 일반 적·비행선은 ENTRANCE초 뒤에 나온다.
+  // 돌려주는 것: [지금 실행할 명령, 나중에 실행할 명령(없으면 null)]
+  function stageEntrance(w, cmds) {
+    if (!isKnightWave(w)) return [cmds, null];
+    const isLater = c => c.type === 'airship' || (c.type === 'spawn' && c.kind !== 'knight');
+    const now = cmds.filter(c => !isLater(c)), later = cmds.filter(isLater);
+    const at = now.findIndex(c => c.type === 'spawn' && c.kind === 'knight');
+    if (at >= 0) now.splice(at + 1, 0, { type: 'bossEntrance' });
+    return [now, later.length ? later : null];
+  }
+
   function create({ rng = Math.random } = {}) {
     const d = {
       wave: 1,
       nextWaveIn: null,   // 다음 웨이브까지 남은 게임 시간. null = 예약 없음
       thiefTimer: FIRST_THIEF,
       bossOnly: false,    // 보스 전용(테스트 모드): 보스 웨이브만, 일반 적·비행선·도둑 없음
+      later: null,        // 등장 연출 뒤에 실행할 명령 {t, cmds}
       // 새 판: 웨이브 startWave(기본 1, 테스트 모드에선 고른 웨이브)부터. 이전 판의 예약은 모두 사라진다.
       // opts.bossOnly면 startWave 이상인 첫 보스 웨이브부터 보스만 나온다.
       start(enemies, startWave = 1, opts = {}) {
         d.bossOnly = !!opts.bossOnly;
         let w = Math.max(1, Math.floor(startWave) || 1);
         if (d.bossOnly) w = nextBossWave(w);
-        d.wave = w; d.nextWaveIn = null; d.thiefTimer = FIRST_THIEF;
-        return waveCommands(w, enemies, rng, d.bossOnly);
+        d.wave = w; d.nextWaveIn = null; d.thiefTimer = FIRST_THIEF; d.later = null;
+        return d.begin(w, enemies);
+      },
+      begin(w, enemies) { // 웨이브 w의 명령 (기사 웨이브면 나머지는 등장 연출 뒤로 미룸)
+        const [now, later] = stageEntrance(w, waveCommands(w, enemies, rng, d.bossOnly));
+        d.later = later ? { t: ENTRANCE, cmds: later } : null;
+        return now;
       },
       // 도둑을 뺀 적이 모두 사라졌을 때. 다음 웨이브를 예약한다.
-      waveCleared() { d.nextWaveIn = CLEAR_DELAY; },
+      waveCleared() { if (!d.later) d.nextWaveIn = CLEAR_DELAY; }, // 아직 나올 적이 남았으면 클리어가 아님
       // 게임 시간 dt만큼 진행. enemies = 지금 살아 있는 적
       tick(dt, enemies) {
         const cmds = [];
@@ -98,11 +116,12 @@
           d.thiefTimer = 20 + rng() * 15; // 20~35초마다 60% 확률
           if (count(enemies, 'thief') < thiefCap(d.wave) && rng() < .6) cmds.push({ type: 'spawn', kind: 'thief' }, { type: 'thiefNotice' });
         }
+        if (d.later) { d.later.t -= dt; if (d.later.t <= 0) { cmds.push(...d.later.cmds); d.later = null; } } // 등장 연출이 끝나면 나머지 적
         if (d.nextWaveIn !== null) {
           d.nextWaveIn -= dt;
           if (d.nextWaveIn <= 0) {
             d.nextWaveIn = null; d.wave = d.bossOnly ? nextBossWave(d.wave + 1) : d.wave + 1;
-            cmds.push(...waveCommands(d.wave, enemies, rng, d.bossOnly));
+            cmds.push(...d.begin(d.wave, enemies));
           }
         }
         return cmds;
@@ -111,7 +130,7 @@
     return d;
   }
 
-  const Waves = { create, waveCommands, pickType, regularCount, airshipCount, thiefCap, isBossWave, isEnraged, isKnightWave, CLEAR_DELAY };
+  const Waves = { create, waveCommands, pickType, regularCount, airshipCount, thiefCap, isBossWave, isEnraged, isKnightWave, CLEAR_DELAY, ENTRANCE };
   if (typeof module !== 'undefined' && module.exports) module.exports = Waves;
   else root.Waves = Waves;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

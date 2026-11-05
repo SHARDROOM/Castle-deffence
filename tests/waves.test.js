@@ -173,3 +173,21 @@ test('보스 전용(테스트 모드): 보스 웨이브만, 일반 적·비행�
   d.start([], 3); assert.equal(d.wave, 3); assert.equal(d.bossOnly, false); // 옵션 없으면 평소대로
   assert.ok(d.start([], 3).some(c => c.type === 'spawn' && c.kind !== 'boss'));
 });
+
+test('15웨이브: 기사가 먼저 혼자 나와 등장 연출, 나머지 적은 ENTRANCE초 뒤에', () => {
+  const d = Waves.create({ rng: () => 0.5 });
+  const cmds = d.start([], 15), types = cmds.map(c => c.type + (c.kind ? ':' + c.kind : ''));
+  assert.deepEqual(cmds.filter(c => c.type === 'spawn').map(c => c.kind), ['knight']);
+  assert.ok(!cmds.some(c => c.type === 'airship'));
+  assert.equal(types.indexOf('bossEntrance'), types.indexOf('spawn:knight') + 1);
+  assert.ok(types.indexOf('waveStart') < types.indexOf('spawn:knight'));
+  d.waveCleared(); assert.equal(d.nextWaveIn, null); // 나머지가 나오기 전엔 클리어가 아님
+  assert.deepEqual(d.tick(Waves.ENTRANCE - .1, []), []);
+  const later = d.tick(.2, []);
+  assert.equal(later.filter(c => c.type === 'spawn').length, Waves.regularCount(15));
+  assert.equal(later.filter(c => c.type === 'airship').length, Waves.airshipCount(15));
+  assert.deepEqual(d.tick(5, []), []); // 한 번만
+  // 다른 보스 웨이브는 그대로 한꺼번에
+  const c10 = Waves.create({ rng: () => 0.5 }).start([], 10);
+  assert.ok(c10.filter(c => c.type === 'spawn').length > 1); assert.ok(!c10.some(c => c.type === 'bossEntrance'));
+});
