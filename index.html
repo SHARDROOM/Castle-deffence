@@ -241,7 +241,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 28f544</div>
+<div id="buildVer" class="hud">v2026.11.05 · 6c6de1</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -2019,13 +2019,13 @@ function makeSoldier(type){
     swd(bx(.05, 1.5, .17), steelK, 0, -.8, 0, kBlade); swd(bx(.02, 1.46, .04), M(0xf4f7fa), 0, -.8, -.09, kBlade);
     swd(bx(.05, .18, .12), steelK, 0, -1.6, 0, kBlade).rotation.x = -.5;
     // 칼집에 꽂힌 자리 (허리 칼집과 같은 위치·기울기, 크기는 그대로): 등장할 때 여기서 뽑음
-    const kSheath = new THREE.Object3D(); kSheath.position.set(-.34, -.02, -.06); kSheath.rotation.set(.32, 0, -.1); rig.add(kSheath); // 허리 칼집 (뽑을 때 왼손으로 앞으로 기울이고 뒤로 밂)
+    const kSheath = new THREE.Object3D(); kSheath.position.set(-.36, -.02, -.02); kSheath.rotation.set(.14, 0, -.08); rig.add(kSheath); // 허리 칼집 (뽑을 때 왼손으로 앞으로 기울이고 뒤로 밂)
     kSword.position.y = .62; kBlade.scale.y = .45; kSheath.add(kSword);                                   // 칼날은 칼집 안에 (보이는 길이만큼)
     // 허리 칼집 (왼쪽 허리, 비어 있음)
     const hip = new THREE.Group(); hip.scale.set(1, .6, 1); // 칼집 모양 (kSheath에 붙어 함께 움직임). 다리 옆으로 조금 뒤로 기울여, 끝이 무릎 아래쯤에서 끝나게
     const hipAdd = (geo, m, y) => { const o = new THREE.Mesh(geo, m); o.position.y = y; hip.add(o); return o; };
     hipAdd(bx(.09, 1.45, .2), leather, -.72); hipAdd(bx(.11, .12, .22), gold, -.02); hipAdd(bx(.11, .14, .22), gold, -1.42); hipAdd(bx(.1, .3, .21), goldD, -.6);
-    const KS_ROT = new THREE.Euler(.32, 0, -.1), KS_POS = new THREE.Vector3(-.34, -.02, -.06);
+    const KS_ROT = new THREE.Euler(.14, 0, -.08), KS_POS = new THREE.Vector3(-.36, -.02, -.02); // 다리 옆으로 거의 곧게 늘어뜨림 (뒤로 꼬리처럼 뻗지 않게)
     kSheath.add(hip);
     S_extra = {swordTip: tipO, kSword, kBlade, kSheath, KS_ROT, KS_POS, kPaul};
     // 등에 멘 대검: 칼집째 비스듬히, 손잡이가 오른쪽 어깨 위로
@@ -2887,14 +2887,14 @@ function armIK(up, el, targetW, L1, L2, pole, w){ // 두 마디 팔 IK: 손(아�
 }
 // 눕힌 칼로 플레이어를 가리킴: k = 0이면 뽑은 직후 자리·방향, 1이면 오른 어깨 앞에서 칼끝이 정면(플레이어)을 향함. 칼은 수평 그대로
 const KN_AIM_GRIP = new THREE.Vector3(.36, 1.45, .72);    // 한 손으로 가리킬 때 쥔 곳 (기사 몸 기준, +z = 앞)
-const KN_STANCE_GRIP = new THREE.Vector3(.16, 1.12, .62);   // 기본 자세: 두 손으로 쥔 곳 (배꼽 앞)
+const KN_STANCE_GRIP = new THREE.Vector3(.34, 1.1, .6);     // 기본 자세: 두 손으로 쥔 곳 (오른쪽 허리 앞: 칼이 투구 눈구멍을 가리지 않게)
 const KN_STANCE_UP = .32;                                  // 기본 자세: 칼끝을 플레이어 쪽보다 이만큼 위로 (라디안)
 const LEFT_GRIP = new THREE.Vector3(0, -.29, 0);           // 칼 좌표에서 왼손이 쥐는 곳 (오른손 아래, 폼멜 쪽)
 function knightAim(e, k, s2 = 0){ // k: 뽑은 직후 → 한 손으로 플레이어를 가리킴, s2: → 두 손 기본 자세
   e.g.updateMatrixWorld(true);
   const grip = e.swFrom.grip.clone().lerp(KN_AIM_GRIP, k).lerp(KN_STANCE_GRIP, s2);
   // 칼끝이 향할 곳: 플레이어 머리 (몸 기준). 좌우는 수평으로 돌고, 위아래는 플레이어 쪽으로 살짝 내려감
-  const eye = e.g.worldToLocal(yawObj.position.clone()), to = eye.sub(grip);
+  const eye = e.g.worldToLocal(yawObj.position.clone()).add(new THREE.Vector3(.35, .3, 0)), to = eye.sub(grip); // 플레이어 눈을 정확히 겨누면 칼이 끝만 보이는 판처럼 보여서 머리 조금 위·옆을 겨눔
   const a0 = Math.atan2(e.swFrom.dir.x, e.swFrom.dir.z), a1 = Math.atan2(to.x, to.z); let da = a1 - a0; da = Math.atan2(Math.sin(da), Math.cos(da));
   const tilt = Math.atan2(to.y, Math.hypot(to.x, to.z)), ang = a0 + da*k, el = lerp(Math.asin(clamp(e.swFrom.dir.y, -1, 1)), tilt, k) + KN_STANCE_UP*s2;
   const dir = new THREE.Vector3(Math.sin(ang)*Math.cos(el), Math.sin(el), Math.cos(ang)*Math.cos(el));
@@ -3002,6 +3002,21 @@ function knightTrail(e, on, dt){
   for (let i = 0; i < T.N; i++){ const pp = T.pts[Math.max(0, T.pts.length - T.N + i)] || last; if (!pp) break; a.setXYZ(i*2, pp[0].x, pp[0].y, pp[0].z); a.setXYZ(i*2 + 1, pp[1].x, pp[1].y, pp[1].z); }
   a.needsUpdate = true; T.mesh.visible = T.pts.length > 1;
 }
+// 그로기: 칼끝을 앞쪽 땅에 꽂고 한쪽 무릎을 꿇은 채 두 손으로 칼자루에 기대 휘청임 (회복은 knightCharge의 rise)
+const KB_KNEEL = {pt:.1, py:.05, ct:.32, cy:.08, tL:-.9, tR:.55, kL:1.5, kR:1.65, drop:.42};
+const KH_PLANT = {grip:new THREE.Vector3(.12, 1.1, .78), dir:new THREE.Vector3(.02, -.96, .28)};
+const KN_RISE = .7;
+function knightGroggy(e, dt){
+  groggyPose(e, dt);                                                                // 머리 위 별
+  e.state = 'stun'; e.st = 0; e.freezeT = 0;
+  const w = Math.sin(e.t*2.2)*.04;
+  knightBody(e, {...KB_KNEEL, ct:KB_KNEEL.ct + w, cy:KB_KNEEL.cy + w*.5}, Math.min(1, dt*8));
+  e.rig.rotation.z = Math.sin(e.t*1.7)*.03;                                        // 휘청임
+  e.rig.position.y = .9 - (e.drop || 0);
+  knightHoldT(e, KH_PLANT, 0);
+  e.neck.rotation.x = .45 + Math.sin(e.t*1.3)*.08;                                  // 고개를 떨굼
+  knightPauldrons(e); knightTrail(e, false, dt);
+}
 function knightCharge(e, dt, p, f){
   const g = e.g;
   if (e.freezeT > 0){ e.freezeT -= dt; e.st -= dt; return; }                  // 타격 순간: 기사만 짧게 멈춤 (자세·시간 그대로)
@@ -3075,7 +3090,12 @@ function knightCharge(e, dt, p, f){
     knightHoldT(e, khBlend(KH.follow, KH_STANCE(), k), bodyYaw(e)*(1 - k));
     knightTrail(e, false, dt);
     if (t >= KC.recover){ e.state = 'guard'; e.st = .8; e.atkCd = KC.cd; }
-  } else { e.state = 'guard'; e.st = .8; } // 그 밖(그로기에서 돌아옴 등): 기본 자세로
+  } else if (e.state === 'rise'){ // 그로기에서 회복: 칼을 뽑아 들며 천천히 일어나 기본 자세로
+    const k = easeIO(Math.min(1, t/KN_RISE)), b = kbBlend(KB_KNEEL, KB.stance, k);
+    knightBody(e, b, Math.min(1, dt*14)); knightHoldT(e, khBlend(KH_PLANT, KH_STANCE(), k), 0);
+    if (t >= KN_RISE){ e.state = 'guard'; e.st = .8; e.atkCd = Math.max(e.atkCd || 0, 1); }
+  } else if (e.state === 'stun'){ e.state = 'rise'; e.st = 0; knightTrail(e, false, dt); }
+  else { e.state = 'guard'; e.st = .8; } // 그 밖: 기본 자세로
 }
 // ---------- 왕국의 마지막 기사: 가까우면 물러나며 피하고 → 땅을 베어 부채꼴 충격파 ----------
 // backstep: 뒤로 크게 뛰어 물러남 (이 동안 공격이 닿지 않음) → raise: 칼을 오른쪽 어깨 위로 끌어올리며 몸을 오른쪽으로 감아 힘을 모음 →
@@ -3996,7 +4016,7 @@ function execFace(x, e, dt){ // 처형당하는 적이 플레이어 쪽(시작�
   e.yaw += d*Math.min(1, dt*14); e.g.rotation.y = e.yaw;
 }
 function execPlace(x, e, dt){ // 일반 처형: 플레이어를 적 정면 정해진 거리로 (처음 0.2초에 걸쳐 미끄러져 감)
-  const p = yawObj.position, gap = e.r + EXEC_GAP, k = x.t < .2 ? Math.min(1, dt*14) : 1;
+  const p = yawObj.position, gap = e.r + EXEC_GAP*(e.def.scale > 2 ? 2.7 : 1), k = x.t < .2 ? Math.min(1, dt*14) : 1; // 큰 적은 더 떨어져서 (몸에 파묻히지 않게)
   p.x += (e.g.position.x + x.fx*gap - p.x)*k; p.z += (e.g.position.z + x.fz*gap - p.z)*k; collide(p, .45, footY);
 }
 // ---------- 보스 처형: 무릎을 밟고 뛰어올라 투구 틈에 꽂고, 비틀고, 내려오며 벰 (약 2.2초) ----------
@@ -5721,7 +5741,7 @@ function update(dt){
     if (e.groggyT > 0 || e.kneelT > 0){ // 패링당해 그로기, 또는 처형 후 무릎 꿇음: 제자리에 멈춤
       if (!(exec && exec.e === e)) e.groggyT -= dt;
       if (e.kneelT > 0) e.kneelT -= dt;
-      if (e.react === 'down') downPose(e, dt); else if (e.boss && e.react) bossReact(e, dt); else groggyPose(e, dt);
+      if (e.react === 'down') downPose(e, dt); else if (e.boss && e.react) bossReact(e, dt); else if (e.type === 'knight') knightGroggy(e, dt); else groggyPose(e, dt);
       if (e.flash > 0){ e.flash -= dt; tint(e, 0xffffff); } else tint(e, 0x3a3000);
       continue;
     }
