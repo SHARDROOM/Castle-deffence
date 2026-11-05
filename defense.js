@@ -75,7 +75,7 @@
     if (d.parryT > 0 && parryable) {
       if (inParryRange(attack, d, p)) { // 패리 사거리 안의 공격만 받아냄
         // 패리 강도가 attack.breakPow보다 낮으면 패리가 깨짐: 받아내지 못하고 피해를 그대로 받음 (적은 비틀거리지 않음)
-        if (attack.breakPow && (d.parryPow || 0) < attack.breakPow) return result(Object.assign({ outcome: 'parryBroken', parryBroken: true, damage: n, landed: true }, extra));
+        if (attack.breakPow && (d.parryPow || 0) < attack.breakPow) return result(Object.assign({ outcome: 'parryBroken', parryBroken: true, damage: n*(attack.breakDmgMul ?? 1), landed: true }, extra));
         const parried = { outcome: 'parried', parried: true, parryTarget: attack.src || null };
         if (!attack.pow || d.parryPow >= attack.pow) return result(Object.assign(parried, extra));
         // 패리 강도가 모자라면 패리는 되지만 피해 일부(60%)가 들어옴
@@ -86,8 +86,8 @@
   }
 
   // 공격 하나를 판정한다.
-  //   attack:   {dmg, kind, from?: {x, z}, src?, srcR?, dist?, pow?, breakPow?, canReturn?, inParryRange?}
-  //             breakPow = 패리 강도가 이보다 낮으면 패리가 깨짐 (outcome 'parryBroken', 피해 그대로)
+  //   attack:   {dmg, kind, from?: {x, z}, src?, srcR?, dist?, pow?, breakPow?, breakDmgMul?, canReturn?, inParryRange?}
+  //             breakPow = 패리 강도가 이보다 낮으면 패리가 깨짐 (outcome 'parryBroken'), breakDmgMul = 그때 받는 피해 배율 (기본 1)
   //             src = 패리 성공 시 비틀거릴 적, srcR = 그 적의 반지름,
   //             dist = 미리 잰 거리 (없으면 from으로 계산), canReturn = 반사탄을 되돌릴 보스가 있는가,
   //             inParryRange = (투사체) 패리를 누른 순간 패리 사거리 안에 있었는가
