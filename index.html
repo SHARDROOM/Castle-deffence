@@ -251,7 +251,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.06 · 24d72a</div>
+<div id="buildVer" class="hud">v2026.11.06 · 56ed1b</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -1126,7 +1126,7 @@ function animatePump(dt){ // 펌프를 뒤로 당겼다(탄피 배출) 앞으로
 // ---------- 탄피: 배출구에서 오른쪽 위로 튀어나와 빙글빙글 돌며 떨어짐 ----------
 const shells = [];
 const SHELL_PORT = {rifle:[.036,.01,-.02], pistol:[.025,.035,-.03], sniper:[.03,.035,0], shotgun:[.034,.012,-.03], minigun:[.08,-.02,.05], flame:[0,0,0]};
-const shellGeo = new THREE.CylinderGeometry(.006,.006,.03,8), hullGeo = new THREE.CylinderGeometry(.011,.011,.05,10);
+const shellGeo = new THREE.CylinderGeometry(.006,.006,.03,8), hullGeo = new THREE.CylinderGeometry(.011,.011,.05,10); shellGeo.userData.shared = hullGeo.userData.shared = true; // 탄피 공용 모양
 function ejectShell(dx){
   if (!gunModel || W.melee || W.flame) return;
   const port = SHELL_PORT[activeKey] || SHELL_PORT.rifle, sg = activeKey === 'shotgun';
@@ -1145,7 +1145,7 @@ function updateShells(dt){
     s2.m.position.addScaledVector(s2.v, dt);
     s2.m.rotation.x += s2.spin.x*dt; s2.m.rotation.y += s2.spin.y*dt; s2.m.rotation.z += s2.spin.z*dt;
     if (s2.m.position.y < .02){ s2.m.position.y = .02; if (!s2.bounced){ s2.bounced = true; s2.v.y = Math.abs(s2.v.y)*.3; s2.v.x *= .4; s2.v.z *= .4; s2.spin.multiplyScalar(.3); shellTink(s2.m); } else { s2.v.set(0,0,0); s2.spin.set(0,0,0); } }
-    if (s2.life <= 0){ scene.remove(s2.m); shells.splice(i,1); }
+    if (s2.life <= 0){ scene.remove(s2.m); disposeTree(s2.m); shells.splice(i,1); } // 샷건 탄피 밑동은 탄피마다 새 모양
   }
 }
 let lastTink = 0;
@@ -1534,7 +1534,7 @@ function renderScopeView(){ // 배율 조준경으로 조준 중이면 렌즈에
 function buildGun(){
   const key = activeKey;
   gun.rotation.set(0,0,0); gun.position.set(GUN_X, GUN_Y, GUN_Z);
-  if (gunModel) gun.remove(gunModel);
+  const oldModel = gunModel; if (gunModel) gun.remove(gunModel);
   gunModel = new THREE.Group(); const D = 0x3b2b3d; let muzzle;
   if (key==='minigun') muzzle = buildMinigun(gunModel);
   else if (key==='flame') muzzle = buildFlame(gunModel);
@@ -1545,6 +1545,7 @@ function buildGun(){
   gunModel.add(flash); gunModel.add(muzzleLight); // 총구 화염은 총 모델에 붙여서 총이 들려도 총구를 따라감
   flash.position.set(0, boreY, muzzle - .01); muzzleLight.position.set(0, boreY, muzzle - .02);
   flash.scale.setScalar((key==='shotgun' ? 1.8 : key==='sniper' ? 1.5 : 1) * (W.flashScale || 1));
+  if (oldModel) disposeTree(oldModel, false); // 지난 총 모형의 모양 정리 (총구 화염·불빛은 새 모형으로 옮긴 뒤). 재질은 공용(GM)이라 둠
 }
 var armsReady = false; // 팔·칼집 준비 전에는 칼집을 만들지 않음
 buildGun();
@@ -1605,7 +1606,7 @@ const toCam = (arr, obj) => _av.set(arr[0], arr[1], arr[2]).applyMatrix4(obj.mat
 const scab = new THREE.Group(); camera.add(scab); scab.visible = false;
 const SCABP = {x:-.1, y:-.34, z:-.5, rx:0, ry:.801, rz:1.774}; // 안쪽으로 굽은 칼등 쪽이 위, 볼록한 칼날 쪽이 아래
 function buildScabbard(){
-  while (scab.children.length) scab.remove(scab.children[0]);
+  while (scab.children.length){ const c = scab.children[0]; scab.remove(c); disposeTree(c, false); } // 지난 칼집 모양 정리
   const box = new THREE.Group(); box.rotation.y = Math.PI; scab.add(box); // 칼날(날 쪽)이 바깥을 향하게 뒤집어 넣음
   const bs = (W.bladeScale || 1), lac = SM(0x15121a, .2, .35), horn = SM(0xd8cfc0, 0, .5);
   if (W.rapier){ // 레이피어: 곧고 가는 가죽 검집 (왼쪽 허리)
@@ -1703,7 +1704,7 @@ function createSyringe(){
 function clearItemFx(){
   if (itemFx.syringe) itemFx.syringe.visible = false;
   if (itemFx.strip) itemFx.strip.visible = false;
-  itemFx.wraps.forEach(w => camera.remove(w)); itemFx.wraps.length = 0;
+  itemFx.wraps.forEach(w => { camera.remove(w); disposeTree(w); }); itemFx.wraps.length = 0;
   if (itemFx.syringe){ itemFx.syringe.userData.plunger.position.y = .05; itemFx.syringe.userData.liquid.scale.y = 1; } // 취소돼도 다음 주사기는 처음 모양
 }
 // 거즈 붕대 재질: 가로세로로 성기게 짠 천 무늬 + 약간의 얼룩
@@ -1982,7 +1983,7 @@ function makeSoldier(type){
     const gold = M(0xd4a640), goldD = M(0x9c7424), goldL = M(0xf0cf72), black = M(0x14100c), leather = M(0x3a2414), steelK = M(0xd7dce2);
     const P = (parent, w, h, d, mat, x, y, z, rx = 0, ry = 0, rz = 0, head) => { const m = add(parent, bx(w, h, d), mat, x, y, z, head); m.rotation.set(rx, ry, rz); return m; }; // 상자 하나 (기울임 포함)
     // 투구: 약간 길쭉한 9각기둥 (면이 정면을 보게 돌림, 면마다 각진 음영), 윗면·목 테두리, 십자 눈구멍
-    const HF = c => { const m = new THREE.MeshLambertMaterial({color:c, flatShading:true}); mats.push(m); return m; };
+    const HF = c => { const m = new THREE.MeshPhongMaterial({color:c, flatShading:true, specular:0x1a1408, shininess:8}); mats.push(m); return m; }; // r128 Lambert에는 flatShading이 없어 면이 매끈하게 뭉개졌음: Phong(반사 거의 없음)으로 면마다 각진 음영
     const prism = (r, h, mat, y) => { const m = add(neck, new THREE.CylinderGeometry(r, r, h, 9), mat, 0, y, 0, true); m.rotation.y = Math.PI/9; return m; };
     prism(.23, .56, HF(0xd4a640), .25); prism(.245, .06, HF(0x9c7424), -.01); prism(.2, .05, HF(0x9c7424), .555);
     const HZ = .23*Math.cos(Math.PI/9);                                                                   // 정면 면까지 거리
@@ -2393,7 +2394,7 @@ function spawnAirship(){
   return e;
 }
 function dropRider(e, r){ // 곤돌라에서 뛰어내려 낙하산을 펴고 내려옴
-  const wp = new THREE.Vector3(); r.S.root.getWorldPosition(wp); r.S.root.parent.remove(r.S.root);
+  const wp = new THREE.Vector3(); r.S.root.getWorldPosition(wp); r.S.root.parent.remove(r.S.root); disposeEnemy({g:r.S.root, mats:r.S.mats}); // 곤돌라에 타 있던 모형은 정리 (내려오는 적은 새로 만듦)
   const o = spawnEnemy(r.type); if (!o) return;
   o.g.position.set(clamp(wp.x, -27, 27), wp.y, clamp(wp.z, -27, 27)); o.dropY = wp.y;
   const chute = new THREE.Mesh(new THREE.SphereGeometry(.9, 14, 8, 0, Math.PI*2, 0, Math.PI/2), new THREE.MeshLambertMaterial({color: Math.random() < .5 ? 0xe8e0cc : 0xa8342a, side:THREE.DoubleSide}));
@@ -2581,7 +2582,7 @@ function applyKill(e, k){ // Combat이 정한 처치 보상을 게임에 적용
   spawnCoins(ex, ez, k.gold);
   if (k.rage) rageT = 3; // 피의 광분
   if (k.drop) spawnPickup(ex, ez);
-  if (e.boss && e.shieldDropped){ scene.remove(e.shieldFx.parent); droppedShield = null; }
+  if (e.boss && e.shieldDropped){ scene.remove(e.shieldFx.parent); disposeTree(e.shieldFx.parent); droppedShield = null; }
   if (k.boss){ $('bossBar').classList.add('hide'); bossTeleg.visible = false; if (k.bossDrop) spawnPickup(ex, ez); showNotice((e.def.name || '보스') + '을(를) 쓰러뜨렸어요!', 0xffd166); shakeT = .5; }
   if (k.waveCleared) onWaveCleared();
 }
@@ -2824,9 +2825,19 @@ function flameTick(dt){
 //       가끔 deflect(방패로 총알 반사)
 let slowT = 0, shakeT = 0;
 const rbullets = [], bossFx = [];
-const rbGeo = new THREE.BoxGeometry(.05,.05,.7), rbMat = new THREE.MeshBasicMaterial({color:0xffe08a});
+const rbGeo = new THREE.BoxGeometry(.05,.05,.7), rbMat = new THREE.MeshBasicMaterial({color:0xffe08a}); rbGeo.userData.shared = true;
 // 효과 조각을 지울 때 GPU 자원도 놓아줌 (여러 조각이 같이 쓰는 지오메트리는 shared 표시로 남김)
 const sharedGeo = g => { g.userData.shared = true; return g; };
+// 장면에서 뺀 물체 묶음의 GPU 자원 정리. 여러 곳에서 함께 쓰는 모양·재질(공용)은 남김 (다시 쓸 때 셰이더를 새로 만들지 않게)
+let SHARED_MAT = null;
+function sharedMats(){ return SHARED_MAT || (SHARED_MAT = new Set([...Object.values(GM), ...Object.values(AM), ...Object.values(ARM_M), coinMat, rbMat, WRAP_MAT, STRIP_MAT])); }
+function disposeTree(o, mats = true){ // mats = false면 모양만 (재질을 다른 데서 함께 쓸 수 있는 총 모형 등)
+  if (!o) return; const keep = sharedMats();
+  o.traverse(c => {
+    if (c.geometry && !c.geometry.userData.shared) c.geometry.dispose();
+    if (mats && c.material) [].concat(c.material).forEach(m => { if (!keep.has(m)) m.dispose(); });
+  });
+}
 function disposeFx(m){ if (m.geometry && !m.geometry.userData.shared) m.geometry.dispose(); if (m.material) m.material.dispose(); }
 const telegGeo = sharedGeo(new THREE.PlaneGeometry(1,1)); telegGeo.rotateX(-Math.PI/2);
 const bossTeleg = new THREE.Mesh(telegGeo, new THREE.MeshBasicMaterial({color:0xff2a1a, transparent:true, opacity:.3, depthWrite:false}));
@@ -3587,6 +3598,7 @@ let bossCam = null;
 // 카메라 순서(초): 1인칭 눈 → 어깨 너머(OVER) → 플레이어 앞에서 한 번 비춤(FACE~HOLD) → 기사 클로즈업(CLOSE) → 천천히 다가감(END)
 const BC = {over:1.0, face:1.65, hold:2.3, close:2.9, end:4.5};
 function startBossCam(e){
+  if (bossCam) endBossCam(); // 이전 연출이 남아 있으면 그 플레이어 모형부터 정리
   const eye = camera.getWorldPosition(new THREE.Vector3()), q = camera.getWorldQuaternion(new THREE.Quaternion());
   const look0 = eye.clone().add(new THREE.Vector3(0, 0, -10).applyQuaternion(q));
   const hero = makePlayerModel().setWeapon(activeKey); scene.add(hero.root);                     // 3인칭으로 보이는 플레이어 모습 (장착한 무기·부품 그대로)
@@ -4051,7 +4063,7 @@ function animateBoss(e, dt){
   e.rig.position.x = st === 'chargePrep' ? (Math.random() - .5)*.04*k : 0; // 돌진 직전 부르르 떨림
 }
 function resetBoss(){
-  if (droppedShield){ scene.remove(droppedShield); droppedShield = null; }
+  if (droppedShield){ scene.remove(droppedShield); disposeTree(droppedShield); droppedShield = null; }
   rbullets.forEach(b => scene.remove(b.m)); rbullets.length = 0;
   bossFx.forEach(f => { scene.remove(f.m); disposeFx(f.m); }); bossFx.length = 0; clearKnightWaves(); clearSanct(); clearKnightTrail(); // 지난 판의 갈라진 땅·충격파·칼 잔상
   bossTeleg.visible = false; $('bossBar').classList.add('hide'); $('bossBar').classList.remove('enraged'); $('bossBar').querySelector('.bn').textContent = '철의 거인';
@@ -4071,8 +4083,8 @@ function weaponUI(){
 function resetSword(){
   if (punish) endPunish(); // 기사에게 당하던 연출을 정리 (날아간 칼 제거, 칼 다시 보이게)
   if (bossCam) endBossCam(); bossCamOut = 0; // 보스 등장 연출 정리
-  gunSkill = null; rifleBuffT = 0; shellCharges = 0; shellLoadT = 0; if (heli){ scene.remove(heli.g); heli = null; }
-  skillG = 0; skillPh = null; waves.forEach(wv => scene.remove(wv.g)); waves.length = 0;
+  gunSkill = null; rifleBuffT = 0; shellCharges = 0; shellLoadT = 0; if (heli){ scene.remove(heli.g); disposeTree(heli.g); heli = null; }
+  skillG = 0; skillPh = null; waves.forEach(wv => { scene.remove(wv.g); disposeTree(wv.g); }); waves.length = 0;
   if (kickLegM) kickLegM.visible = false; // 대검 처형 발차기 다리
   sheathT = 0; swordOut = false; drawT = 0; pendingSwing = false; greatRel = null; sheathPlant = false; guarding = false; parryHeld = false; guardSlashQ = null; guardBlocked = 0;
   swingT = 0; swordHitT = 0; parryT = 0; parryCd = 0; exec = null; rageT = 0; hitStopT = 0;
@@ -4216,7 +4228,7 @@ function updateHeli(dt){
     for (const gn of h.gunners) heliGunner(gn, dt);
   } else { // 떠남
     h.g.position.y += dt*6; h.g.position.x += Math.cos(h.ang + Math.PI/2)*dt*18; h.g.position.z += Math.sin(h.ang + Math.PI/2)*dt*18;
-    if (h.t > 2 + h.life + 4){ scene.remove(h.g); heli = null; updateSkillUI(); return; }
+    if (h.t > 2 + h.life + 4){ scene.remove(h.g); disposeTree(h.g); heli = null; updateSkillUI(); return; }
   }
   // 진행 방향을 바라보고 살짝 기울어짐
   const yawH = Math.atan2(-Math.sin(h.ang), Math.cos(h.ang)); h.g.rotation.set(.12, yawH, -.1);
@@ -4433,7 +4445,7 @@ function updateWaves(dt){
       wv.hit.add(e); burst(e, W.crave ? 0xb0302a : 0xbfe6ff, 8); sfx.slashHit();
       hitEnemy(e, 25, 'wave', {x: wv.ox, z: wv.oz});
     }
-    if (wv.life <= 0 || Math.abs(wv.g.position.x) > 31 || Math.abs(wv.g.position.z) > 31){ scene.remove(wv.g); waves.splice(i,1); }
+    if (wv.life <= 0 || Math.abs(wv.g.position.x) > 31 || Math.abs(wv.g.position.z) > 31){ scene.remove(wv.g); disposeTree(wv.g); waves.splice(i,1); }
   }
 }
 function swordAttack(){
@@ -5888,7 +5900,7 @@ function makeSayaGroup(bs, deco, great, rapier){
   return g;
 }
 function rebuildShopGun(){ // 가운데 큰 총: 지금 미리보기 중인 부품 구성으로 다시 만듦
-  if (shopGun) shopScene.remove(shopGun);
+  if (shopGun){ shopScene.remove(shopGun); disposeTree(shopGun, false); } // 상점 미리보기: 고를 때마다 새로 만듦
   shopGun = new THREE.Group(); shopInner = new THREE.Group(); shopGun.add(shopInner);
   const key = weaponKey;
   let res;
@@ -6131,7 +6143,7 @@ function showItemModel(k){
     const rim = new THREE.DirectionalLight(0xffb38a, .6); rim.position.set(-2, 1, -2); itemScene.add(rim);
     itemCam = new THREE.PerspectiveCamera(35, 1, .05, 50); itemCam.position.set(0, .35, 3); itemCam.lookAt(0, 0, 0);
   }
-  if (itemModel) itemScene.remove(itemModel);
+  if (itemModel){ itemScene.remove(itemModel); disposeTree(itemModel, false); }
   itemModel = k ? buildItemModel(k) : null; if (itemModel) itemScene.add(itemModel);
 }
 function renderItemsPanel(){
@@ -6202,8 +6214,8 @@ let WORLD0 = null; // 첫 판 시작 때의 엄폐물·충돌 상자·횃불 목
 function resetWorld(){ // 적·화살·보급품을 치우고, 보스가 부순 엄폐물을 원래 순서대로 되살림
   enemies.slice().forEach(e=>{ scene.remove(e.g); disposeEnemy(e); }); enemies.length=0;
   shots.forEach(s=>scene.remove(s.m)); shots.length=0;
-  pickups.forEach(k=>scene.remove(k.g)); pickups.length = 0; dropTimer = 45;
-  bits.forEach(b=>scene.remove(b.m)); bits.length = 0; tracers.forEach(t=>scene.remove(t.line)); tracers.length = 0; flames.forEach(f=>scene.remove(f.m)); flames.length = 0; // 지난 판의 파편·불꽃·탄 궤적
+  pickups.forEach(k=>{ scene.remove(k.g); disposeTree(k.g); }); pickups.length = 0; dropTimer = 45;
+  bits.forEach(b=>scene.remove(b.m)); bits.length = 0; tracers.forEach(t=>{ scene.remove(t.line); disposeTree(t.line); }); tracers.length = 0; flames.forEach(f=>scene.remove(f.m)); flames.length = 0; // 지난 판의 파편·불꽃·탄 궤적
   if (!WORLD0){ WORLD0 = {obstacles: obstacles.slice(), obMeshes: obMeshes.slice(), torches: torches.slice()}; return; }
   let restored = false;
   for (const o of WORLD0.obstacles){
@@ -6246,6 +6258,7 @@ function resetGame(){
 }
 function gameOver(){
   state='over'; firing=false; stopMusic(); sfx.over(); setScope(false);
+  if (bossCam) endBossCam(); // 등장 연출 중에 끝나도 검은 띠·숨긴 UI가 게임 오버 화면에 남지 않게
   if (document.exitPointerLock) document.exitPointerLock();
   if (score>best){ best=score; store.set('fps_best', best); }
   $('best').textContent='최고 '+best;
@@ -6424,8 +6437,8 @@ function update(dt){
     const k = pickups[i]; k.life -= dt; k.t += dt;
     k.box.rotation.y += dt*1.5; k.box.position.y = 0.7 + Math.sin(k.t*3)*0.15;
     k.g.visible = k.life > 5 || Math.floor(k.t*6)%2===0;
-    if (Math.hypot(p.x-k.g.position.x, p.z-k.g.position.z) < 1.3 && footY < 1.5){ equipSpecial(k.kind); scene.remove(k.g); pickups.splice(i,1); continue; }
-    if (k.life <= 0){ scene.remove(k.g); pickups.splice(i,1); }
+    if (Math.hypot(p.x-k.g.position.x, p.z-k.g.position.z) < 1.3 && footY < 1.5){ equipSpecial(k.kind); scene.remove(k.g); disposeTree(k.g); pickups.splice(i,1); continue; }
+    if (k.life <= 0){ scene.remove(k.g); disposeTree(k.g); pickups.splice(i,1); }
   }
 
   const eyeY = footY + 1.45;
@@ -6436,7 +6449,7 @@ function update(dt){
     if (e.dropY > 0){ // 낙하산 강하 중
       e.t += dt; e.dropY = Math.max(0, e.dropY - 4.2*dt); e.g.position.y = e.dropY; e.g.rotation.z = Math.sin(e.t*2)*.08;
       animateSoldier(e, dt, 99);
-      if (e.dropY <= 0){ e.g.rotation.z = 0; if (e.chute){ e.g.remove(e.chute); e.chute = null; } groundBurst(e.g.position.x, e.g.position.z, 3, .8); }
+      if (e.dropY <= 0){ e.g.rotation.z = 0; if (e.chute){ e.g.remove(e.chute); disposeTree(e.chute); e.chute = null; } groundBurst(e.g.position.x, e.g.position.z, 3, .8); }
       continue;
     }
     e.t += dt; if (e.slowT > 0) e.slowT -= dt;
@@ -6588,7 +6601,7 @@ function effects(dt){
   }
   for (let i=tracers.length-1;i>=0;i--){
     const t=tracers[i]; t.life-=dt; const k=Math.max(0,t.life/TRACER); t.line.material.opacity=k*k;
-    if (t.life<=0){ scene.remove(t.line); tracers.splice(i,1); }
+    if (t.life<=0){ scene.remove(t.line); disposeTree(t.line); tracers.splice(i,1); } // 탄 궤적: 쏠 때마다 새 선 (모양·재질)
   }
   vig = Math.max(0, vig - dt*1.5);
   $('vig').style.opacity = Math.max(vig, hp/maxHp()<.3 && state==='play' ? 0.35 : 0);
