@@ -251,7 +251,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.06 · 2f9cd2</div>
+<div id="buildVer" class="hud">v2026.11.06 · 52784f</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -2089,9 +2089,10 @@ const PM_HOLD = { // 무기를 든 자리 (몸 기준, +z = 앞): pos = 무기 �
   minigun:{pos:[0, 1.1, .56], tilt:.08, poleR:[-1, -.3, .3], poleL:[1, -.3, .3]},
   flame:  {pos:[.06, 1.16, .4], tilt:.12, yaw:.5, poleR:[-1, -.3, .3], poleL:[1, -.3, .3]}, // 총구를 조금 왼쪽으로 돌려 앞손잡이가 왼손에 닿게
   dual:   {pos:[-.21, 1.22, .38], tilt:.4},  // 쌍권총: 두 손에 한 자루씩 앞으로
-  sword:  {pos:[.2, .98, .26]},              // 칼: 납도 상태로 왼쪽 허리에 수평으로 (칼자루가 앞). 왼손은 칼집 입구, 오른손은 편히 내림
+  sword:  {pos:[.2, .98, .26], dir:[.12, -.12, -1]},     // 일본도: 납도 상태로 왼쪽 허리에 수평으로 (칼자루가 앞). 왼손은 칼집 입구, 오른손은 편히 내림
+  rapier: {pos:[.21, .96, .2], dir:[.15, -.5, -1], back:[.04, .96, -.18], poleL:[1, 0, -1]}, // 레이피어: 왼쪽 허리에 비스듬히 차고, 왼손은 뒷짐 (back = 손 자리, 팔이 몸을 지나지 않는 값을 탐색해서 고름)
+  great:  {pos:[-.2, 1.66, -.44], dir:[.5, -.86, -.05]},   // 대검: 등에 비스듬히 메고 칼자루는 오른쪽 어깨 위 (배낭 뒤)
 };
-const PM_SAYA_DIR = new THREE.Vector3(.12, -.12, -1).normalize(); // 납도한 칼(칼집)의 칼끝 방향: 뒤로 거의 수평, 살짝 바깥·아래
 function buildSaya3P(g, w, mats){ // 3인칭용 칼집 (1인칭 buildScabbard와 같은 모양, 칼 좌표: +y가 칼끝)
   const bs = w.bladeScale || 1, mk = (c, m, r) => { const x = SM(c, m, r); mats.push(x); return x; };
   const lac = mk(0x15121a, .2, .35), horn = mk(0xd8cfc0, 0, .5);
@@ -2124,7 +2125,7 @@ function makePlayerModel(){
   for (const x of [-.13, 0, .13]){ B(S.chest, .11, .15, .06, olive, x, .17, .2); B(S.chest, .11, .03, .065, strap, x, .25, .2); }
   B(S.chest, .07, .14, .06, black, -.18, .34, .19); B(S.chest, .01, .12, .01, black, -.2, .47, .19); // 무전기 + 안테나
   for (const x of [-.15, .15]) B(S.chest, .07, .05, .4, strap, x, .44, 0);
-  B(S.chest, .38, .42, .2, oliveD, 0, .22, -.27); B(S.chest, .4, .1, .22, olive, 0, .44, -.27); B(S.chest, .3, .14, .06, olive, 0, .12, -.39); // 배낭
+  B(S.chest, .32, .32, .19, oliveD, 0, .28, -.265); B(S.chest, .34, .09, .21, olive, 0, .45, -.265); B(S.chest, .26, .12, .06, olive, 0, .2, -.385); // 배낭 (허리 뒤는 비워 둠: 뒷짐 진 손이 들어갈 자리)
   // 허리: 허리띠, 오른쪽 권총집, 왼쪽 주머니
   B(S.rig, .46, .07, .3, strap, 0, .06, 0); B(S.rig, .07, .2, .12, black, -.27, -.05, .02); B(S.rig, .08, .12, .1, olive, .26, -.01, .04); // 권총집은 오른쪽(−x)
   // 무릎 보호대
@@ -2143,9 +2144,10 @@ function makePlayerModel(){
       pm.info = key === 'sword' ? makeWeapon('sword', gear.sword.eq) : {};
       pm.dual = key === 'pistol' && gear.pistol.eq.conv === 'dual';
       if (key === 'sword') buildSaya3P(g, pm.info, sayaMats);                                    // 납도: 칼은 칼집 속 (칼자루만 보임)
-      const H = PM_HOLD[pm.dual ? 'dual' : key] || PM_HOLD.rifle;
+      pm.sword = key === 'sword' ? (pm.info.great ? 'great' : pm.info.rapier ? 'rapier' : 'sword') : null; // 칼 종류: 일본도 / 레이피어 / 대검
+      const H = PM_HOLD[pm.dual ? 'dual' : pm.sword || key] || PM_HOLD.rifle;
       wpn.scale.set(1, 1, 1);
-      if (key === 'sword'){ wpn.position.set(...H.pos); wpn.quaternion.setFromUnitVectors(KUP, PM_SAYA_DIR); } // 칼집을 허리에 수평으로 (칼끝이 뒤)
+      if (key === 'sword'){ wpn.position.set(...H.pos); wpn.quaternion.setFromUnitVectors(KUP, PM_V.set(...H.dir).normalize()); } // 칼집 방향 (+y가 칼끝)
       else if (H.dir){ // 긴 총: 총구 방향(dir)으로 돌리고, 오른손 손잡이가 grip 자리에 오게
         const f = new THREE.Vector3(...H.dir).normalize(), u = new THREE.Vector3(0, 1, 0).addScaledVector(f, -f.y).normalize(), z = f.clone().negate(), x = new THREE.Vector3().crossVectors(u, z);
         wpn.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, u, z));            // 총구(−z)가 dir로, 총 위쪽이 위로
@@ -2162,12 +2164,14 @@ function makePlayerModel(){
       S.thighL.rotation.set(-.12, 0, -.04); S.thighR.rotation.set(.12, 0, .04); S.kneeL.rotation.set(.2, 0, 0); S.kneeR.rotation.set(.12, 0, 0);
       S.root.updateMatrixWorld(true);
       const key = pm.key || 'rifle', Hd = HANDS[key] || HANDS.rifle, g = wpn.children[0]; if (!g) return pm;
-      const H = PM_HOLD[pm.dual ? 'dual' : key] || {}, pR = H.poleR ? PM_V.set(...H.poleR) : PM_POLE_R, pL = H.poleL ? PM_V2.set(...H.poleL) : PM_POLE_L;
+      const H = PM_HOLD[pm.dual ? 'dual' : pm.sword || key] || {}, pR = H.poleR ? PM_V.set(...H.poleR) : PM_POLE_R, pL = H.poleL ? PM_V2.set(...H.poleL) : PM_POLE_L;
       const R = g.localToWorld(PM_R.set(...Hd.R));                                              // 매 프레임 새 벡터를 만들지 않게 재사용
       if (key === 'sword'){ S.armL.quaternion.setFromEuler(PM_E.set(-.18, 0, -.14)); S.foreL.quaternion.setFromEuler(PM_E.set(-.3, 0, 0)); } // 칼: 오른팔은 편히 내림 (몸을 가로질러 칼자루를 잡으면 팔이 조끼를 뚫음)
       else armIK(S.armL, S.foreL, R, ARM_H1, ARM_H2, pR, 1);                                   // 오른손(−x 쪽 팔): 손잡이 (칼은 칼자루를 쥐고 뽑을 준비)
       let L;
-      if (key === 'sword') L = g.localToWorld(PM_L.set(0, .24, 0));                               // 칼: 왼손은 칼집 입구를 잡음
+      if (pm.sword === 'great'){ S.armR.quaternion.setFromEuler(PM_E.set(-.18, 0, .14)); S.foreR.quaternion.setFromEuler(PM_E.set(-.3, 0, 0)); } // 대검은 등에: 왼팔도 편히 내림
+      else if (pm.sword === 'rapier') armIK(S.armR, S.foreR, S.root.localToWorld(PM_L.set(...H.back)), ARM_H1, ARM_H2, pL, 1); // 레이피어: 왼손 뒷짐 (허리 뒤 가운데)
+      else if (key === 'sword') L = g.localToWorld(PM_L.set(0, .24, 0));                          // 일본도: 왼손은 칼집 입구를 잡음
       else if (pm.dual) L = g.localToWorld(PM_L.set(Hd.R[0] - DUAL_DX, Hd.R[1], Hd.R[2]));      // 쌍권총: 왼손은 왼쪽 권총 손잡이
       else if (Hd.L) L = g.localToWorld(PM_L.set(...Hd.L));
       if (L) armIK(S.armR, S.foreR, L, ARM_H1, ARM_H2, pL, 1);                            // 왼손(+x 쪽 팔)
