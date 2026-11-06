@@ -251,7 +251,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.06 · 950512</div>
+<div id="buildVer" class="hud">v2026.11.06 · 4e7fac</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3092,7 +3092,7 @@ const GRIP = new THREE.Vector3(0, -.42, 0);                                     
 // 회전이 전달되며 칼이 폭발적으로 가속, 몸 앞을 지날 때 타격) → 타격(기사만 짧게 정지, 맞으면 화면 흔들림·상체에 반동) →
 // 후속(관성으로 칼과 몸이 조금 더 돌아감) → 회복(무게중심을 되찾으며 기본 자세로 이어짐)
 const KC = {far:11, near:4.5, walk:1.3, coil:.55, windup:.9, dash:34, accel:.14, dashMax:.85, reach:6.2, brace:.18,
-            slash:.3, impact:.55, follow:.32, recover:.75, cd:1.7, dmg:32, stride:.55, behind:2.5}; // behind: 플레이어 시점 뒤쪽으로 이만큼 지난 곳을 노리고 돌진
+            slash:.38, impact:.55, follow:.32, recover:.75, cd:1.7, dmg:32, stride:.55, behind:2.5}; // behind: 플레이어 시점 뒤쪽으로 이만큼 지난 곳을 노리고 돌진
 const KUP = new THREE.Vector3(0, 1, 0);
 // 칼 쥔 자세: 몸통 기준 (몸통이 돈 만큼 함께 돌려서 씀). grip = 쥔 곳, dir = 칼날 방향 (+z = 앞)
 const KH = {
@@ -3135,6 +3135,8 @@ const KB = { // 몸 자세 키 (라디안, drop은 몸 기준 높이)
 };
 function kbBlend(a, b, k){ const o = {}; for (const key in a) o[key] = lerp(a[key], b[key] ?? 0, k); return o; }
 const easeIO = t => t*t*(3 - 2*t), easeOut = t => 1 - (1 - t)*(1 - t), easeIn = t => t*t;
+// 베기 진행: 느리게 출발해(처음 30% 시간에 경로 3%) 점점 가속, 맞는 순간이 가장 빠름 (기존 easeIn은 속도 변화가 작아 일정해 보였음)
+const kSlash = u => .1*u + .9*Math.pow(u, 3.2);
 function knightStep(e, dt, p, speed){ // 플레이어 쪽으로 걸음 (경기장 안에서, 플레이어와 겹치지 않게)
   const g = e.g, dx = p.x - g.position.x, dz = p.z - g.position.z, d = Math.hypot(dx, dz) || 1;
   const mv = Math.min(speed*dt, Math.max(0, d - (e.r + 3)));
@@ -3245,7 +3247,7 @@ function knightCharge(e, dt, p, f){
   } else if (e.state === 'slash'){ // ④ 베기: 골반 → 허리·어깨 → 칼 순서로 회전 전달, 칼은 폭발적으로 가속
     const kp = easeIO(clamp(t/(KC.slash*.6), 0, 1));                                          // 골반이 먼저
     const kc = easeIO(clamp((t - .035)/(KC.slash*.62), 0, 1));                                // 허리·어깨가 조금 늦게
-    const ks = easeIn(clamp((t - .07)/(KC.slash*.6), 0, 1));                                  // 칼은 가장 늦게, 가속하며
+    const ks = kSlash(clamp((t - .07)/(KC.slash*.62), 0, 1));                                 // 칼은 가장 늦게, 느리게 출발해 점점 가속
     e.lunge = Math.max(0, e.lunge - dt*28);                                                   // 남은 추진력으로 한 걸음 더 밀고 들어감
     const mv = Math.min(e.lunge*dt, Math.max(0, dist - (e.r + 2.6))); g.position.x += Math.sin(e.yaw)*mv; g.position.z += Math.cos(e.yaw)*mv; BOSS_WORLD.collide(g.position, e.r);
     const bp = kbBlend(KB.brace, KB.strike, kp), bc = kbBlend(KB.brace, KB.strike, kc);
@@ -3285,7 +3287,7 @@ function knightCharge(e, dt, p, f){
 // backstep: 뒤로 크게 뛰어 물러남 (이 동안 공격이 닿지 않음) → raise: 칼을 오른쪽 어깨 위로 끌어올리며 몸을 오른쪽으로 감아 힘을 모음 →
 // smash: 골반 → 어깨 → 칼 순서로 풀며 앞쪽 땅을 비스듬히 베어 지나감 (칼이 땅에 닿는 순간 부채꼴 충격파) →
 // stuck: 멈추지 않고 왼쪽 아래까지 관성으로 흘림 → pull: 무게중심을 되찾으며 기본 자세로
-const KG = {close:7, back:.45, backDist:5.5, raise:.55, smash:.24, impact:.5, stuck:.3, hold:1.0, pull:.6, cd:1.8, // hold: 성역 중에만 칼이 땅에 걸린 채 버티는 후딜
+const KG = {close:7, back:.45, backDist:5.5, raise:.55, smash:.3, impact:.5, stuck:.3, hold:1.0, pull:.6, cd:1.8, // hold: 성역 중에만 칼이 땅에 걸린 채 버티는 후딜
             wave:{speed:22, len:24, half:.52, dmg:26, linger:2.6}}; // half: 부채꼴 반각(±30°), linger: 다 퍼진 뒤 갈라진 땅이 남는 시간
 const KH_G = { // 몸통 기준 칼 쥔 자세 (몸통이 돈 만큼 함께 돌림)
   over:  {grip:new THREE.Vector3(.36, 2.0, .2),  dir:new THREE.Vector3(.5, .62, -.6)},     // 오른쪽 어깨 위로 끌어올림 (칼끝은 뒤·위)
@@ -3412,7 +3414,7 @@ function knightClose(e, dt, p){
     if (t >= KG.raise){ e.state = 'smash'; e.st = 0; e.hitDone = false; sfx.bossSwing(.7); }
   } else if (e.state === 'smash'){ // ③ 골반 → 어깨 → 칼 순서로 풀며 앞쪽 땅을 비스듬히 베어 지나감
     const kp = easeIO(clamp(t/(KG.smash*.6), 0, 1)), kc = easeIO(clamp((t - .03)/(KG.smash*.65), 0, 1));
-    const ks = easeIn(clamp((t - .05)/(KG.smash*.8), 0, 1));                                   // 칼은 가장 늦게, 가속하며
+    const ks = kSlash(clamp((t - .05)/(KG.smash*.8), 0, 1));                                  // 칼은 가장 늦게, 느리게 출발해 점점 가속
     const bp = kbBlend(KB_G.raise, KB_G.cut, kp), bc = kbBlend(KB_G.raise, KB_G.cut, kc);
     const b = {...bp, ct:bc.ct, cy:bc.cy}; knightBody(e, b, 1);
     const h = ks < KG.impact ? khBlend(KH_G.over, KH_G.ground, ks/KG.impact) : khBlend(KH_G.ground, KH_G.past, (ks - KG.impact)/(1 - KG.impact));
@@ -3448,8 +3450,8 @@ function knightClose(e, dt, p){
 // x2: 그 힘으로 멈추지 않고 한 바퀴 돌며 수평으로 한 번 더 벰 → crouch: 웅크림 → rise: 하늘 높이(12m) 뛰어오르며 칼을 오른쪽 어깨 위로 →
 // hover: 잠깐 떠서 플레이어를 내려다봄 → dive: 몸 전체를 앞으로 기울여 사선으로 플레이어에게 떨어지며 사선으로 베어 착지
 // (착지 일격은 패리 강도가 KX.breakPow보다 낮으면 패리가 깨짐) → xland: 착지 충격을 받아내며 일어나 기본 자세로
-const KX = {wind:.42, slash:.28, spin:.62, crouch:.3, rise:.62, hover:.42, dive:.42, land:.8, cd:2.4, end:.75, cd1:1.2, cd2:1.6, // end: 짧은 변형(1·2타에서 끝)의 마무리, cd1·cd2: 그 뒤 쉬는 시간 (패턴 사이 대기를 줄임)
-            chopRaise:.38, chopHit:.2, chopStay:.35, chopCd:1.8, dmgChop:30, // 내려치기 변형: 머리 위로 → 수직으로 내려침 → 땅에 박힌 채 잠깐
+const KX = {wind:.42, slash:.35, spin:.72, crouch:.3, rise:.62, hover:.42, dive:.42, land:.8, cd:2.4, end:.75, cd1:1.2, cd2:1.6, // end: 짧은 변형(1·2타에서 끝)의 마무리, cd1·cd2: 그 뒤 쉬는 시간 (패턴 사이 대기를 줄임)
+            chopRaise:.38, chopHit:.26, chopStay:.35, chopCd:1.8, dmgChop:30, // 내려치기 변형: 머리 위로 → 수직으로 내려침 → 땅에 박힌 채 잠깐
             h:12, reach:6.4, dmg1:22, dmg2:22, dmg3:34, breakPow:130, behind:2, hold:.9}; // behind: 착지점은 플레이어 시점 뒤쪽을 노림, hold: 성역 중에만 착지 후 웅크린 채 버티는 후딜
 const KX_TMP = new THREE.Vector3();
 const KB_CHOP = { // 내려치기 변형 몸 자세
@@ -3508,7 +3510,7 @@ function knightCombo(e, dt, p){
     if (!e.xLen){ const r = Math.random(); e.xLen = r < .6 ? 3 : r < .8 ? 4 : r < .9 ? 1 : 2; } // 60% 도약 사선 베기, 20% 내려치기(4), 10% 한 번 베고 끝, 10% 두 번 베고 끝
   } else if (e.state === 'x1'){ // ② 어깨 위에서 내리치듯 오른쪽 아래로 벰 (골반 → 어깨 → 칼 순서)
     knightLunge(e, dt, p, 9*(1 - Math.min(1, t/KX.slash)));
-    const kp = easeIO(clamp(t/(KX.slash*.6), 0, 1)), kc = easeIO(clamp((t - .03)/(KX.slash*.62), 0, 1)), ks = easeIn(clamp((t - .06)/(KX.slash*.6), 0, 1));
+    const kp = easeIO(clamp(t/(KX.slash*.6), 0, 1)), kc = easeIO(clamp((t - .03)/(KX.slash*.62), 0, 1)), ks = kSlash(clamp((t - .06)/(KX.slash*.62), 0, 1));
     const bp = kbBlend(KB.coil, KB.strike, kp), bc = kbBlend(KB.coil, KB.strike, kc);
     const b = {...bp, ct:bc.ct - e.recoil*.25, cy:bc.cy, cz:bc.cz}; knightBody(e, b, 1);
     const h = khPath(ks); h.grip.z -= e.recoil*.12; knightHoldT(e, h, bodyYaw(e));
@@ -3517,14 +3519,14 @@ function knightCombo(e, dt, p){
     if (ks >= 1 && e.xLen === 1){ e.state = 'xend'; e.st = 0; e.xFrom = {b:KB.strike, h:KH.low, cd:KX.cd1}; }   // 변형: 한 번 베고 끝
     else if (ks >= 1){ e.state = 'x2'; e.st = 0; e.hitDone = false; e.spin0 = e.yaw; sfx.bossSwing(.7); }
   } else if (e.state === 'x2'){ // ③ 그대로 한 바퀴 돌며 수평으로 한 번 더 벰 (돌기 시작은 베기가 끝난 방향에서 이어짐)
-    const k = Math.min(1, t/KX.spin), ks = k < .5 ? easeIn(k*2)*.5 : .5 + easeOut((k - .5)*2)*.5; // 한 바퀴: 가속했다 감속
+    const k = Math.min(1, t/KX.spin), ks = k < .82 ? kSlash(k/.82) : 1 + .05*easeOut((k - .82)/.18); // 한 바퀴: 느리게 돌기 시작해 점점 빨라져 벤 뒤 짧게 더 돌며 멈춤
     e.yaw = e.spin0 + ks*Math.PI*2; g.rotation.y = e.yaw;                                     // 몸 전체가 오른쪽으로 한 바퀴
     knightLunge(e, dt, p, 6*(1 - k));
     const b = kbBlend(KB.strike, KB_X.spin, Math.min(1, k*3)); knightBody(e, b, kDamp(20, dt));
     const h = khBlend(KH.low, KH_X.spinOut, Math.min(1, k*4)); h.grip.y += Math.sin(k*Math.PI)*.08;
     knightHoldT(e, h, bodyYaw(e));
     knightTrail(e, true, dt);
-    if (!e.hitDone && ks >= .93){ e.hitDone = true; faceP(60); knightSwingHit(e, p, KX.dmg2); } // 다시 플레이어를 마주 볼 때 벰
+    if (!e.hitDone && ks >= .96){ e.hitDone = true; faceP(60); knightSwingHit(e, p, KX.dmg2); } // 다시 플레이어를 마주 볼 때(가장 빠를 때) 벰
     if (k >= 1 && e.xLen === 2){ e.state = 'xend'; e.st = 0; e.xFrom = {b:KB_X.spin, h:KH_X.spinOut, cd:KX.cd2}; } // 변형: 두 번 베고 끝
     else if (k >= 1 && e.xLen === 4){ e.state = 'xchop'; e.st = 0; e.hitDone = false; faceP(60); sfx.bossSwing(.5); } // 변형: 도약 대신 머리 위에서 내려치기
     else if (k >= 1){ e.state = 'crouch'; e.st = 0; faceP(60); }
@@ -3553,7 +3555,7 @@ function knightCombo(e, dt, p){
     } else {
       const k = Math.min(1, t/Dv), kk = easeIn(k); y = KX.h*(1 - kk); hx = .45 + .55*kk;          // 사선으로 가속하며 떨어짐
       b = kbBlend(KB_X.air, KB_X.dive, easeOut(Math.min(1, k*2)));
-      const ks = easeIn(clamp((k - .35)/.65, 0, 1));                                             // 칼은 떨어지는 끝에서 몰아서 벰
+      const ks = kSlash(clamp((k - .35)/.65, 0, 1));                                            // 칼은 떨어지는 끝에서 몰아서 벰 (느리게 출발해 가속)
       h = ks < KG.impact ? khBlend(KH_G.over, KH_G.ground, ks/KG.impact) : khBlend(KH_G.ground, KH_G.past, (ks - KG.impact)/(1 - KG.impact));
       knightTrail(e, k > .3, dt);
     }
@@ -3577,7 +3579,7 @@ function knightCombo(e, dt, p){
     const Rz = KX.chopRaise, Hz = KX.chopHit;
     let b, h;
     if (t < Rz){ faceP(8); const k = easeIO(t/Rz); b = kbBlend(KB_X.spin, KB_CHOP.up, k); h = khBlend(KH_X.spinOut, KH_CHOP.up, k); }
-    else if (t < Rz + Hz){ const k = easeIn((t - Rz)/Hz); b = kbBlend(KB_CHOP.up, KB_CHOP.down, Math.min(1, k*1.2)); h = khBlend(KH_CHOP.up, KH_CHOP.down, k);
+    else if (t < Rz + Hz){ const k = kSlash((t - Rz)/Hz); b = kbBlend(KB_CHOP.up, KB_CHOP.down, Math.min(1, k*1.2)); h = khBlend(KH_CHOP.up, KH_CHOP.down, k);
       knightLunge(e, dt, p, 7);
       if (!e.hitDone && k >= .82){ e.hitDone = true; g.updateMatrixWorld(true); const tip = e.kSword.localToWorld(new THREE.Vector3(0, -2.2, 0));
         crackRing(tip.x, tip.z); groundBurst(tip.x, tip.z, 5, 1.2); sfx.bossSlam(); knightSwingHit(e, p, KX.dmgChop, {breakPow: KX.breakPow, breakDmgMul: .05}); e.freezeT = .08; shakeT = Math.max(shakeT, .45); } }
@@ -3731,7 +3733,7 @@ function knightPunish(e, dt, p){ // 기사 쪽: 착지에서 일어나 → 다�
   if (t < KP.kickAt){ const k = easeIO(t/KP.kickAt); b = kbBlend(KB_X.land, KB.stance, k); h = khBlend(KH_G.past, KH_STANCE(), k); }
   else if (t < KP.raise){ const k = t < KP.kickHit ? easeOut((t - KP.kickAt)/(KP.kickHit - KP.kickAt)) : 1 - easeIO((t - KP.kickHit)/(KP.raise - KP.kickHit)); b = kbBlend(KB.stance, KB_KICK, k); h = KH_STANCE(); }
   else if (t < KP.slash){ const k = easeIO((t - KP.raise)/(KP.slash - KP.raise)); b = kbBlend(KB.stance, KB_G.raise, k); h = khBlend(KH_STANCE(), KH_G.over, k); }
-  else if (t < KP.swEnd){ const ks = easeIn(Math.min(1, (t - KP.slash)/(KP.swEnd - KP.slash))); b = kbBlend(KB_G.raise, KB_G.cut, Math.min(1, ks*1.3));
+  else if (t < KP.swEnd){ const ks = kSlash(Math.min(1, (t - KP.slash)/(KP.swEnd - KP.slash))); b = kbBlend(KB_G.raise, KB_G.cut, Math.min(1, ks*1.3));
     h = ks < .6 ? khBlend(KH_G.over, KH_G.ground, ks/.6) : khBlend(KH_G.ground, KH_G.past, (ks - .6)/.4); if (!e.punSnd){ e.punSnd = true; sfx.bossSwing(.8); } }
   else { const k = easeIO(Math.min(1, (t - KP.swEnd)/(KP.end - KP.swEnd))); b = kbBlend(KB_G.past, KB.stance, k); h = khBlend(KH_G.past, KH_STANCE(), k); }
   knightBody(e, b, kDamp(16, dt)); knightHoldT(e, h, bodyYaw(e)*.6);
