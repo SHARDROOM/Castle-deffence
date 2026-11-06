@@ -254,7 +254,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.06 · 1831c8</div>
+<div id="buildVer" class="hud">v2026.11.06 · 436b8d</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -1813,6 +1813,7 @@ function updateViewArms(){
     else if (!swordOut && !(drawT > 0) && !(sheathT > 0)) armVL.g.visible = false;
     else { const lp = _av.set(0, -.17, 0).applyMatrix4(gunModel.matrix).applyMatrix4(gun.matrix).clone(); placeArm(armVL, lp, ARM_S.L, axisOf([0,1,0], _q1)); }
   } else if (sword){ scab.updateMatrix(); const lp = _av.set(0, .3, 0).applyMatrix4(scab.matrix); placeArm(armVL, lp.clone(), ARM_S.L, axisOf([0,1,0], scab.quaternion)); }
+  else if (exec && exec.gun && exec.oh > .3) armVL.g.visible = false; // 저격총 처형: 한 손으로 듦 (왼손은 총에서 뗌)
   else {
     const dual = W.dual && !W.special;
     const lg = gunModel.userData.leftGun;
@@ -2615,8 +2616,9 @@ function updateRecoil(dt){
 }
 let bmgStack = 0; // .50 BMG 연사 누적
 function shoot(){
-  if (itemUse || bossCam) return;
+  if (itemUse || bossCam || exec) return;
   if (reloading>0 || fireCd>0 || rollT>0 || gunSkill || shellLoadT > 0) return;
+  if (activeKey === 'sniper' && !W.special){ const ge = gunExecTarget(); if (ge){ startGunExec(ge); return; } } // 저격총으로 그로기 보스를 겨누고 쏘면 처형
   if (ammo<=0){ W.special ? revertWeapon() : startReload(); return; }
   if (!(activeKey === 'rifle' && Math.random() < ghostChance(up.ghost))) ammo--; // 고스트 불렛
   fireCd = W.rate / rateMul(); if (!W.dual || W.special) gun.position.z += (0.05 + W.recoil*1.2)*(1 - adsK*.85); // 반동으로 총이 뒤로 밀림 (조준 중엔 조금만, 쌍권총은 쏜 쪽만 따로)
@@ -2707,7 +2709,7 @@ function shoot(){
   updateHUD();
 }
 function startReload(){
-  if (state!=='play' || itemUse || W.special || W.melee || reloading>0 || ammo===W.mag) return;
+  if (state!=='play' || itemUse || exec || W.special || W.melee || reloading>0 || ammo===W.mag) return;
   setScope(false);
   reloading = W.reload; updateHUD(); sfx.reloadStart(); if (gunModel) gunModel.userData.clicked = false;
 }
@@ -4879,6 +4881,7 @@ function updateRapierBossExec(dt){
   }
 }
 function updateBossExec(dt){
+  if (exec.gun) return updateSniperBossExec(dt);
   if (exec.rapier) return updateRapierBossExec(dt);
   if (exec.great) return updateGreatBossExec(dt);
   const x = exec, e = x.e, p = yawObj.position, alive = enemies.includes(e);
@@ -4952,6 +4955,17 @@ function bossReact(e, dt){ // 처형당하는 동안 거인의 반응
   if (e.react === 'pre'){ groggyPose(e, dt); return; }
   if (e.stars) e.stars.visible = false;
   const f = Math.min(1, dt*12);
+  if (e.react === 'headshot'){ // 저격총 처형: 머리가 확 뒤로 꺾이고, 버티다가 무게에 끌려 뒤로 쓰러짐 (처음엔 천천히, 점점 빠르게)
+    const t = e.reactT, k = clamp((t - .3)/.75, 0, 1), kk = k*k;
+    mixRot(e.neck, -1.2, 0, 0, t < .1 ? Math.min(1, dt*35) : f); mixRot(e.chest, -.3 - .25*k, 0, 0, f);
+    mixRot(e.armL, .6 + .3*k, 0, -1.2, f*.5); mixRot(e.armR, .6 + .3*k, 0, 1.2, f*.5); mixRot(e.foreL, -.35, 0, 0, f); mixRot(e.foreR, -.35, 0, 0, f);
+    mixRot(e.thighL, -.35*k, 0, -.12*k, f); mixRot(e.thighR, -.15*k, 0, .12*k, f); mixRot(e.kneeL, .2 + .5*k, 0, 0, f); mixRot(e.kneeR, .15 + .2*k, 0, 0, f);
+    e.rig.rotation.set(-1.45*kk + (t < .3 ? -.06*Math.sin(t/.3*Math.PI) : 0), 0, 0); // 맞은 순간 휘청 → 넘어짐
+    e.rig.position.y = lerp(e.hsY === undefined ? .9 : e.hsY, .24, kk); e.rig.position.z = -.55*kk;
+    if (eyeM) eyeM.visible = t > .08 && t < .8 && Math.random() > .35;
+    if (k >= 1){ e.react = 'down'; e.reactT = 0; if (eyeM) eyeM.visible = false; sfx.kneelThud(); sfx.clang(); shakeT = Math.max(shakeT, .45); burst(e, 0xc8b89a, 10); } // 쿵: 땅에 쓰러짐
+    return;
+  }
   if (e.react === 'stab'){ // 머리가 뒤로 젖혀지고 팔을 허우적댐, 눈이 깜빡임
     mixRot(e.neck, -.75, 0, 0, f); mixRot(e.chest, -.35, 0, 0, f);
     mixRot(e.armL, .3 + Math.sin(e.reactT*20)*.15, 0, -1.0, f); mixRot(e.armR, .2, 0, 1.0 + Math.sin(e.reactT*17)*.15, f);
@@ -5098,6 +5112,103 @@ function updateGreatBossExec(dt){
     exec = null; footY = 0;
     if (enemies.includes(e)){ e.groggyT = 0; e.kneelT = 5; } // 5초 동안 쓰러져 있다가 일어남
   }
+}
+// ---------- 저격총 보스 처형: 머리를 정조준해 한 발 → 보스가 머리를 크게 젖히며 뒤로 쓰러짐 → 천천히 몸을 밟고 올라가
+//            한 손으로 총을 들고 가슴에 한 발, 잠깐 기다렸다가 짧은 간격으로 두 발 (약 5초) ----------
+// 걷는 시간만 거리에 따라 달라지고, 올라선 뒤의 시간(on 이후)은 늘 같음
+const SX = {scope:.08, aim:.62, walk:1.15, walkV:6, climb:1.15, raise:.3, shot1:.55, shot2:1.3, shot3:1.46, off:2.0, offDur:.6, end:2.8};
+const SX_RANGE = 32; // 이보다 먼 그로기 보스는 처형하지 않고 평소처럼 쏨
+function gunExecTarget(){ // 화면 가운데에 보이는 그로기 보스 (벽에 가려지면 없음)
+  const targets = obMeshes.concat(ground); enemies.forEach(e => { if (e.boss && e.groggyT > 0) targets.push(...e.parts); });
+  ray.setFromCamera(aim.set(0, 0), camera); ray.far = SX_RANGE;
+  const h = ray.intersectObjects(targets, false)[0]; ray.far = Infinity;
+  return h && h.object.userData.e && !h.object.userData.shield ? h.object.userData.e : null;
+}
+function startGunExec(e){
+  const p = yawObj.position, dx = p.x - e.g.position.x, dz = p.z - e.g.position.z, d = Math.hypot(dx, dz) || 1;
+  exec = {e, t:0, ev:0, y:0, boss:true, gun:true, fx:dx/d, fz:dz/d, d0:d, p0:new THREE.Vector3(p.x, 0, p.z), oh:0, kick:0};
+  e.groggyT = Math.max(e.groggyT, 1); firing = false; e.react = 'pre'; e.reactT = 0;
+}
+function sxHead(e){ return e.neck.localToWorld(new THREE.Vector3(0, .2, .06)); }   // 머리 한가운데
+function sxChest(e){ return e.chest.localToWorld(new THREE.Vector3(0, .12, .12)); } // 가슴 앞쪽 (누우면 위를 봄)
+function sxLook(x, tg, dt, rate){ // 시선을 목표 지점으로
+  const p = yawObj.position, eye = x.y + 1.6;
+  let d = Math.atan2(-(tg.x - p.x), -(tg.z - p.z)) - yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+  yaw += d*Math.min(1, dt*rate);
+  pitch += (Math.atan2(tg.y - eye, Math.max(.15, Math.hypot(tg.x - p.x, tg.z - p.z))) - pitch)*Math.min(1, dt*rate);
+}
+function sxFire(x, to, dmg, finisher){ // 한 발: 총성·불꽃·탄 궤적·반동 + 맞은 자리 효과와 피해
+  const e = x.e, from = new THREE.Vector3(); flash.getWorldPosition(from);
+  sfx.shot('sniper'); flash.visible = true; flash.rotation.z = Math.random()*3; muzzleLight.intensity = 2.5;
+  setTimeout(() => { flash.visible = false; muzzleLight.intensity = 0; }, 50);
+  addTracer(from, to.clone()); gunKick = Math.min(.6, gunKick + .45); x.kick = 1; recoilQ.p += .02;
+  sparkAt(to); sparkAt(to); hitStopT = finisher ? .16 : .07; shakeT = Math.max(shakeT, finisher ? .5 : .2);
+  if (enemies.includes(e)){ hitChips(to, e, dmg); burst(e, 0xffe08a, finisher ? 14 : 6); hitEnemy(e, dmg, 'bossExec', undefined, finisher); }
+  sfx.hitArmor(); hitMarker(true);
+}
+function updateSniperBossExec(dt){
+  const x = exec, e = x.e, p = yawObj.position, alive = enemies.includes(e);
+  x.t += dt; const t = x.t, S = e.def.scale, bx = e.g.position.x, bz = e.g.position.z;
+  if (alive && t < SX.aim + .1) execFace(x, e, dt);
+  if (x.walk1 === undefined){ // 쓰러진 몸의 발끝 바로 앞(A)까지 걷는 시간: 거리에 맞춰서
+    x.A = new THREE.Vector3(bx + x.fx*(.45*S + .5), 0, bz + x.fz*(.45*S + .5));
+    x.walk1 = SX.walk + clamp(Math.hypot(x.A.x - x.p0.x, x.A.z - x.p0.z)/SX.walkV, .8, 2.4); x.on = x.walk1 + SX.climb;
+  }
+  if (!alive && x.ev >= 1 && t > SX.aim + .5 && t < x.on){ exec = null; footY = 0; if (scoped) setScope(false); return; } // 머리 한 발에 죽으면 다가가지 않고 끝
+  if (!alive && t >= x.on && t - x.on < SX.off) x.on = t - SX.off; // 올라선 뒤에 죽으면 바로 내려옴
+  const on = t - x.on; // 올라선 뒤의 시간 (음수면 아직)
+  const view = () => sxChest(e).lerp(sxHead(e), .3); // 가슴을 보되 머리까지 보이게
+  // ① 조준 → 머리에 한 발
+  if (t < SX.aim + .15){
+    if (t >= SX.scope && !x.scoped){ x.scoped = true; setScope(true); }
+    if (alive) sxLook(x, sxHead(e), dt, t < SX.aim - .2 ? 9 : 22);
+    if (x.ev === 0 && t >= SX.aim){
+      x.ev = 1; const h = alive ? sxHead(e) : new THREE.Vector3(bx, 1.74*S, bz); sxFire(x, h, 10); sfx.crit(); sfx.clang();
+      setTimeout(() => setScope(false), 140);
+      if (alive){ e.react = 'headshot'; e.reactT = 0; e.hsY = e.rig.position.y; dropShield(e); }
+    }
+  } else if (t < x.walk1){ // ② 쓰러지는 모습을 보며 다가감
+    const k = easeIO(clamp((t - SX.walk)/(x.walk1 - SX.walk), 0, 1));
+    p.x = lerp(x.p0.x, x.A.x, k); p.z = lerp(x.p0.z, x.A.z, k); x.y = 0;
+    const st = Math.floor((t - SX.walk)/.34); if (t > SX.walk && st !== x.step){ x.step = st; sfx.execStep(); }
+    if (alive) sxLook(x, sxChest(e), dt, 6);
+  } else if (on < 0){ // ③ 천천히 몸을 밟고 올라감: 정강이 → 허벅지 → 허리 위 (세 걸음)
+    if (!x.top && alive){ // 설 자리: 엉덩이에서 가슴 쪽으로 조금, 높이는 몸통 위
+      const hip = e.thighL.getWorldPosition(new THREE.Vector3()).add(e.thighR.getWorldPosition(new THREE.Vector3())).multiplyScalar(.5), ch = sxChest(e);
+      x.top = hip.clone().lerp(ch, -.3); x.topY = hip.y + .16*S; // 허벅지 위쪽: 가슴과 머리가 앞에 내려다보이게
+    }
+    const k = clamp((t - x.walk1)/SX.climb, 0, 1), n = 3, s = Math.min(n - 1, Math.floor(k*n)), u = easeIO(k*n - s); // 한 걸음씩 끊어서
+    const kk = (s + u)/n, T = x.top || new THREE.Vector3(bx, 0, bz);
+    p.x = lerp(x.A.x, T.x, kk); p.z = lerp(x.A.z, T.z, kk);
+    x.y = (x.topY || 1)*((s + Math.min(1, u*1.6))/n) + Math.sin(u*Math.PI)*.12; // 발을 들어 올려 다음 자리에 디딤
+    if (s !== x.cstep){ x.cstep = s; sfx.execStep(); if (s === n - 1) shakeT = Math.max(shakeT, .06); }
+    if (alive) sxLook(x, view(), dt, 7);
+  } else if (on < SX.off){ // ④ 한 손으로 총을 들고 가슴에 한 발 … 두 발
+    if (x.top){ p.x = x.top.x; p.z = x.top.z; } x.y = x.topY || 0;
+    x.oh = Math.min(1, x.oh + dt/SX.raise);
+    const ch = alive ? sxChest(e) : new THREE.Vector3(bx, .5*S, bz);
+    if (alive) sxLook(x, view(), dt, 10);
+    if (x.ev === 1 && on >= SX.shot1){ x.ev = 2; sxFire(x, ch, 8); }
+    if (x.ev === 2 && on >= SX.shot2){ x.ev = 3; sxFire(x, ch, 6); }
+    if (x.ev === 3 && on >= SX.shot3){ x.ev = 4; sxFire(x, ch, 16, true); sfx.kneelThud(); }
+  } else { // ⑤ 총을 내리고 몸에서 내려옴
+    x.oh = Math.max(0, x.oh - dt/SX.raise);
+    const k = easeIO(clamp((on - SX.off)/SX.offDur, 0, 1)), T = x.top || x.A;
+    p.x = lerp(T.x, x.A.x, k); p.z = lerp(T.z, x.A.z, k); x.y = (x.topY || 0)*(1 - k*k) + Math.sin(k*Math.PI)*.1;
+    if (!x.landed && k >= 1){ x.landed = true; sfx.execLand(); }
+    if (alive) sxLook(x, sxChest(e), dt, 5);
+  }
+  x.kick *= Math.exp(-dt*9);
+  if (on >= SX.end){
+    exec = null; footY = 0; if (scoped) setScope(false);
+    if (enemies.includes(e)){ e.groggyT = 0; e.kneelT = 4; } // 4초 동안 누워 있다가 일어남
+  }
+}
+function sniperExecPose(){ // 한 손으로 총을 듦: 오른쪽 아래로 뻗어 총을 살짝 눕히고 가슴을 겨눔, 쏘면 손목이 튐
+  const k = easeIO(exec.oh), kick = exec.kick;
+  if (k <= 0) return;
+  gun.position.set(lerp(gun.position.x, .12, k), lerp(gun.position.y, -.3, k) + kick*.04*k, lerp(gun.position.z, -.78, k) + kick*.09*k); // 팔을 쭉 뻗어 몸에서 멀리
+  gun.rotation.set(lerp(gun.rotation.x, .1, k) + kick*.3*k, lerp(gun.rotation.y, .12, k), lerp(gun.rotation.z, -.75, k));                    // 총을 옆으로 눕혀 겨눔
 }
 function updateExec(dt){
   if (exec.boss) return updateBossExec(dt);
@@ -6519,6 +6630,7 @@ function update(dt){
     if (sd){ const x2 = sd.x*Math.cos(Math.PI/4) - sd.y*Math.sin(Math.PI/4), y2 = sd.x*Math.sin(Math.PI/4) + sd.y*Math.cos(Math.PI/4); px = x2*cantK; py = py + (y2 - py)*cantK; gun.rotation.z += phi*Math.min(1, adsK*1.2); }
     gun.position.x = GUN_X*(1 - adsK) - px*adsK; gun.position.y = (GUN_Y - dip*.3)*(1 - adsK) - py*adsK;
   }
+  if (exec && exec.gun) sniperExecPose();
   if (reloading>0){ reloading-=dt; if (reloading<=0){ ammo=W.mag; gun.rotation.set(0,0,0); setMagsVisible(true); if (dualFx) dualFx.g.visible = false; updateHUD(); sfx.reloadEnd(); } }
   const cool = rollCd > 0 || slowT > 0; // 둔화 중에도 구르기 버튼을 흐리게
   if (cool !== lastCool){ $('roll').classList.toggle('cool', cool); lastCool = cool; }
