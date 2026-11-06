@@ -251,7 +251,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.05 · 8836e7</div>
+<div id="buildVer" class="hud">v2026.11.06 · 65ac44</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -1835,7 +1835,7 @@ const ringGeo = new THREE.TorusGeometry(0.78,0.06,6,24), ringMat = new THREE.Mes
 const eyeMat = new THREE.MeshBasicMaterial({color:0xff3344});
 // 궁수(원거리형): 경무장, 활 / 척후병(스피드형): 단검, 빠름 / 중갑기사(헤비): 판금갑옷, 철퇴 / 암살자(회피형): 망토, 손쇠뇌, 구르기
 const ETYPES = {
-  hero:  {name:'플레이어', color:0x2f5d8a, pants:0x2b2f3a, scale:1, hp:w=>1, speed:w=>0, shoots:false, melee:0, score:0, xp:0}, // 연출용 플레이어 모습 (적으로 나오지 않음)
+  hero:  {name:'플레이어', color:0x3b3f37, pants:0x34352c, scale:1, hp:w=>1, speed:w=>0, shoots:false, melee:0, score:0, xp:0}, // 연출용 플레이어 모습 (적으로 나오지 않음)
   ranged:{name:'궁수',     color:0x4f7a3a, pants:0x6b4a30, scale:1,    hp:w=>2+Math.floor(w/3), speed:w=>2.2+Math.min(w*0.25,2.5), shoots:true,  melee:28, score:100, xp:3},
   speed: {name:'척후병',   color:0xb5443a, pants:0x4a3a2a, scale:0.88, hp:w=>1+Math.floor(w/4), speed:w=>5.2+Math.min(w*0.2,2.3),  shoots:false, melee:24, score:80, xp:2},
   heavy: {name:'중갑기사', color:0x8e96a3, pants:0x6f7682, scale:1.45, hp:w=>9+Math.floor(w*1.5), speed:w=>1.3+Math.min(w*0.08,0.7), shoots:false, melee:45, score:250, xp:6},
@@ -2074,6 +2074,76 @@ function makeSoldier(type){
   return Object.assign({root, rig, chest, neck, thighL, thighR, kneeL, kneeR, armL, armR, foreL, foreR, bowG, str1, str2, nock, shieldFx, mats, parts}, S_extra);
 }
 
+// ---------- 3인칭 플레이어 모습 (연출·나중의 3인칭 시점용) ----------
+// 1인칭 팔과 같은 옷(카키 소매, 검은 장갑)에 헬멧·고글·조끼·탄창 주머니·허리띠·권총집·배낭·무릎 보호대.
+// 들고 있는 무기는 1인칭과 같은 제작 함수로 지금 장착한 부품 그대로 만들고, 두 손을 손잡이에 IK로 붙임.
+// 쓰는 법: makePlayerModel()로 만들고, setWeapon(무기 키)로 무기를 들리고, 매 프레임 place(x, 발 높이, z, 몸 방향)로 세운 뒤, 다 쓰면 dispose().
+// 몸 방향은 +z가 앞인 각도 (atan2(dx, dz)).
+const PM_HOLD = { // 무기를 든 자리 (몸 기준, +z = 앞): pos = 무기 원점, aim = 총구(칼끝) 방향, tilt = 위아래(라디안, +는 아래로)
+  rifle:  {pos:[.12, 1.3, .22],  tilt:.32}, sniper:{pos:[.12, 1.3, .2], tilt:.32}, shotgun:{pos:[.12, 1.28, .2], tilt:.34},
+  pistol: {pos:[.03, 1.2, .42],  tilt:.42}, minigun:{pos:[.14, 1.0, .18], tilt:.08}, flame:{pos:[.14, 1.05, .2], tilt:.12},
+  sword:  {pos:[.06, 1.02, .34], tilt:-.9},  // 칼: 두 손으로 앞에 세워 듦 (칼끝이 앞·위)
+};
+const PM_POLE_R = new THREE.Vector3(1, -.7, -.4), PM_POLE_L = new THREE.Vector3(-1, -.7, -.4); // 팔꿈치는 바깥·아래로
+function makePlayerModel(){
+  const S = makeSoldier('hero'), mats = [];
+  const M = (c, o = {}) => { const m = new THREE.MeshLambertMaterial(Object.assign({color:c}, o)); mats.push(m); return m; };
+  const geos = [];
+  const B = (parent, w, h, d, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const g = new THREE.BoxGeometry(w, h, d); geos.push(g); const m = new THREE.Mesh(g, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); parent.add(m); return m; };
+  const olive = M(0x4a4d3f), oliveD = M(0x3a3c31), tan = M(0x6b6448), strap = M(0x2a2620), black = M(0x16161a), lens = M(0x6fa3c8, {emissive:0x1a3048}), glove = M(0x2a2420), pad = M(0x232323);
+  // 머리: 헬멧(챙·옆 덮개), 고글, 얼굴 가리개
+  B(S.neck, .4, .15, .42, olive, 0, .33, 0); B(S.neck, .42, .04, .45, oliveD, 0, .27, .01); B(S.neck, .06, .14, .36, olive, -.2, .22, 0); B(S.neck, .06, .14, .36, olive, .2, .22, 0);
+  B(S.neck, .38, .035, .03, strap, 0, .27, .2); B(S.neck, .11, .06, .03, lens, -.07, .275, .215); B(S.neck, .11, .06, .03, lens, .07, .275, .215); // 고글
+  B(S.neck, .36, .13, .04, oliveD, 0, .1, .18);                                                   // 얼굴 가리개 (코 아래)
+  // 몸통: 조끼 + 탄창 주머니 3개 + 무전기, 어깨끈, 배낭
+  B(S.chest, .5, .4, .34, tan, 0, .24, 0); B(S.chest, .52, .06, .36, oliveD, 0, .06, 0);
+  for (const x of [-.13, 0, .13]){ B(S.chest, .11, .15, .06, olive, x, .17, .2); B(S.chest, .11, .03, .065, strap, x, .25, .2); }
+  B(S.chest, .07, .14, .06, black, -.18, .34, .19); B(S.chest, .01, .12, .01, black, -.2, .47, .19); // 무전기 + 안테나
+  for (const x of [-.15, .15]) B(S.chest, .07, .05, .4, strap, x, .44, 0);
+  B(S.chest, .38, .42, .2, oliveD, 0, .22, -.27); B(S.chest, .4, .1, .22, olive, 0, .44, -.27); B(S.chest, .3, .14, .06, olive, 0, .12, -.39); // 배낭
+  // 허리: 허리띠, 오른쪽 권총집, 왼쪽 주머니
+  B(S.rig, .46, .07, .3, strap, 0, .06, 0); B(S.rig, .07, .2, .12, black, .27, -.05, .02); B(S.rig, .08, .12, .1, olive, -.26, -.01, .04);
+  // 무릎 보호대
+  for (const k of [S.kneeL, S.kneeR]) B(k, .15, .14, .06, pad, 0, 0, .08);
+  // 장갑: 손을 검게
+  for (const f of [S.foreL, S.foreR]) f.children.forEach(o => { if (o.geometry === SG.hand) o.material = glove; });
+  const wpn = new THREE.Group(); S.root.add(wpn);
+  const pm = {root:S.root, S, wpn, key:null, info:null,
+    setWeapon(key = activeKey){ // 지금 장착한 부품 그대로 무기를 만듦
+      while (wpn.children.length){ const c = wpn.children[0]; wpn.remove(c); c.traverse(o => { if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); }); }
+      const g = new THREE.Group(); wpn.add(g); pm.key = key;
+      if (key === 'minigun') buildMinigun(g); else if (key === 'flame') buildFlame(g);
+      else if (key === 'sword') buildKatana(g, gear.sword.eq);
+      else GUN_BUILDERS[key](g, gear[key].eq);
+      pm.info = key === 'sword' ? makeWeapon('sword', gear.sword.eq) : {};
+      const H = PM_HOLD[key] || PM_HOLD.rifle;
+      wpn.position.set(...H.pos);
+      if (key === 'sword') wpn.rotation.set(Math.PI/2 + H.tilt, 0, 0); // 칼(+y가 칼끝)을 앞·위로 세움
+      else wpn.rotation.set(H.tilt, Math.PI, 0);                        // 총(−z가 총구)을 앞으로, 총구를 살짝 아래로
+      return pm;
+    },
+    place(x, y, z, yaw3p){ // 자리·방향을 정하고 두 손을 손잡이로
+      S.root.position.set(x, y, z); S.root.rotation.y = yaw3p;
+      S.rig.rotation.set(0, 0, 0); S.chest.rotation.set(.05, 0, 0); S.neck.rotation.set(-.05, 0, 0);
+      S.thighL.rotation.set(-.12, 0, -.04); S.thighR.rotation.set(.12, 0, .04); S.kneeL.rotation.set(.2, 0, 0); S.kneeR.rotation.set(.12, 0, 0);
+      S.root.updateMatrixWorld(true);
+      const key = pm.key || 'rifle', Hd = HANDS[key] || HANDS.rifle, g = wpn.children[0]; if (!g) return pm;
+      const R = g.localToWorld(new THREE.Vector3(...Hd.R));
+      armIK(S.armR, S.foreR, R, ARM_L1, ARM_L2, PM_POLE_R, 1);
+      if (key === 'sword' && pm.info.rapier){ S.armL.rotation.set(.35, 0, .25); S.foreL.rotation.set(-1.6, 0, 0); } // 레이피어: 왼손은 등 뒤로
+      else if (Hd.L) armIK(S.armL, S.foreL, g.localToWorld(new THREE.Vector3(...Hd.L)), ARM_L1, ARM_L2, PM_POLE_L, 1);
+      else armIK(S.armL, S.foreL, g.localToWorld(new THREE.Vector3(0, -.13, 0)), ARM_L1, ARM_L2, PM_POLE_L, 1); // 칼: 왼손은 오른손 아래 칼자루
+      return pm;
+    },
+    dispose(){
+      if (S.root.parent) S.root.parent.remove(S.root);
+      wpn.children.forEach(c => c.traverse(o => { if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); }));
+      geos.forEach(g => g.dispose()); mats.forEach(m => m.dispose()); S.mats.forEach(m => m.dispose());
+      S.root.traverse(o => { if (o.isSkinnedMesh) o.geometry.dispose(); });
+    },
+  };
+  return pm;
+}
 // ---------- 병사 움직임 ----------
 const smooth = t => t*t*(3-2*t);
 const lerp = (a, b, t) => a + (b - a)*t;
@@ -3453,14 +3523,14 @@ const BC = {over:1.0, face:1.65, hold:2.3, close:2.9, end:4.5};
 function startBossCam(e){
   const eye = camera.getWorldPosition(new THREE.Vector3()), q = camera.getWorldQuaternion(new THREE.Quaternion());
   const look0 = eye.clone().add(new THREE.Vector3(0, 0, -10).applyQuaternion(q));
-  const hero = makeSoldier('hero'); scene.add(hero.root);                                        // 3인칭으로 보이는 플레이어 모습
+  const hero = makePlayerModel().setWeapon(activeKey); scene.add(hero.root);                     // 3인칭으로 보이는 플레이어 모습 (장착한 무기·부품 그대로)
   bossCam = {e, t:0, fov:75, eye, look0, hero, side:Math.random() < .5 ? -1 : 1};
   firing = false; setScope(false); gun.visible = false;
   $('cine').classList.add('on'); document.body.classList.add('cinema');                       // 위아래 검은 띠, UI 숨김
 }
 let bossCamOut = 0; // 연출이 끝난 뒤 화면 배율이 천천히 돌아오는 시간
 function endBossCam(){
-  if (bossCam && bossCam.hero){ scene.remove(bossCam.hero.root); bossCam.hero.root.traverse(o => { if (o.geometry && !o.geometry.userData.shared && !Object.values(SG).includes(o.geometry)) o.geometry.dispose(); }); bossCam.hero.mats.forEach(m => m.dispose()); }
+  if (bossCam && bossCam.hero) bossCam.hero.dispose();
   bossCam = null; bossCamOut = 1.2; $('cine').classList.remove('on'); document.body.classList.remove('cinema');
   camera.position.set(0, 0, 0); camera.quaternion.identity();
 }
@@ -3471,8 +3541,7 @@ function updateBossCam(dt){
   // 플레이어는 기사 쪽을 보게 (연출이 끝나면 그 방향 그대로 이어서 조작)
   const pp = yawObj.position, gp = e.g.position, dx = gp.x - pp.x, dz = gp.z - pp.z, dist = Math.hypot(dx, dz) || 1;
   yaw = Math.atan2(-dx, -dz); pitch = 0;
-  const H = B.hero; H.root.position.set(pp.x, footY, pp.z); H.root.rotation.y = Math.atan2(dx, dz);
-  H.armR.rotation.set(-.35, 0, .12); H.armL.rotation.set(-.2, 0, -.12); H.neck.rotation.x = -.08;
+  B.hero.place(pp.x, footY, pp.z, Math.atan2(dx, dz));
 }
 // 연출 카메라: 1인칭 눈 → 등 뒤 위로 빠져나옴 → 어깨 너머로 기사를 비춤 (부모(시점) 좌표로 바꿔 넣음)
 const BC_V = new THREE.Vector3(), BC_V2 = new THREE.Vector3(), BC_M = new THREE.Matrix4(), BC_Q = new THREE.Quaternion(), bcRay = new THREE.Raycaster();
