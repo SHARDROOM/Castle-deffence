@@ -254,7 +254,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.06 · 436b8d</div>
+<div id="buildVer" class="hud">v2026.11.06 · 619b74</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3812,7 +3812,7 @@ function knightPunish(e, dt, p){ // 기사 쪽: 착지에서 일어나 → 다�
 // ③ 머리, 한쪽 어깨, 몸통(앞), 등에 성스러운 표식. 표식 하나에 일정 피해를 주면 깨지며 그로기 1 누적
 // ④ 표식을 모두 깨거나 그로기가 꽉 차면 즉시 해제: 노란 기운이 깨져 무너져 내리고 기사는 주춤하며 물러남 → 그로기가 꽉 찼으면 그대로 그로기
 const KS = {stompUp:.45, stompHit:.56, stomp:1.15, tapTurn:.4, tapRaise:.85, tapHit:.98, tap:1.8, grow:.75, carve:.75, field:10, dome:46,
-            regen:6, markHp:12, flinch:.95, flinchDist:2.6, cd:35, hpGate:.8, slow:.62, parryMul:.6, aim:.5};
+            regen:6, markHp:12, flinch:.95, flinchDist:2.6, cd:35, chance:.25, force:20, hpGate:.8, slow:.62, parryMul:.6, aim:.5};
 const SANCT_Y = new THREE.Color(0xffd36a);
 let sanct = null; // 성역 연출 (새 판에서 비움: resetBoss → clearSanct)
 const sanctOn = () => !!(sanct && sanct.on);
@@ -4049,6 +4049,7 @@ function knightPauldrons(e){ // 어깨 갑옷이 위팔 회전의 절반쯤을 �
 }
 function updateKnight(e, dt, p){
   e.t += dt; e.st += dt; if (e.sanctCd > 0) e.sanctCd -= dt;
+  e.sanctWait = !sanct && e.hp <= e.maxHp*KS.hpGate && !(e.sanctCd > 0) ? (e.sanctWait || 0) + dt : 0; // 성역을 쓸 수 있게 된 뒤 기다린 시간 (어떤 동작 중이든)
   if (e.state === 'intro' && e.introWait) e.st = 0; // 등장 연출: 카메라가 당겨질 때까지 칼집에 손을 대지 않고 서 있음
   const g = e.g, P = KN_POSE, D = KN_DRAW, t = e.st;
   let d = Math.atan2(p.x - g.position.x, p.z - g.position.z) - e.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -4100,8 +4101,9 @@ function updateKnight(e, dt, p){
     const dist = Math.hypot(p.x - g.position.x, p.z - g.position.z);
     e.atkCd = (e.atkCd ?? 1.2) - dt;
     let mv = 0;
-    const sanctReady = !sanct && e.hp <= e.maxHp*KS.hpGate && !(e.sanctCd > 0);                          // 성역: 체력 80% 이하, 끝나고 35초 뒤 다시
-    if (s2 >= 1 && e.atkCd <= 0 && sanctReady){ e.state = 'sstomp'; e.st = 0; e.hitDone = false; }        // 발을 굴러 성역 → 칼끝을 찍어 경기장 전체로
+    const sanctReady = !sanct && e.hp <= e.maxHp*KS.hpGate && !(e.sanctCd > 0);                          // 성역: 체력 80% 이하, 끝나고 35초 뒤 다시 쓸 수 있음
+    const sanctGo = sanctReady && s2 >= 1 && e.atkCd <= 0 && (e.sanctWait >= KS.force || Math.random() < KS.chance); // 공격을 고를 때마다 25%, 20초 넘게 안 썼으면 반드시 (주기적으로)
+    if (s2 >= 1 && e.atkCd <= 0 && sanctGo){ e.state = 'sstomp'; e.st = 0; e.hitDone = false; }        // 발을 굴러 성역 → 칼끝을 찍어 경기장 전체로
     else if (s2 >= 1 && e.atkCd <= 0 && dist > KC.far){ e.state = 'windup'; e.st = 0; }                     // 멀면: 칼을 왼쪽 어깨 뒤로 → 돌진 베기
     else if (s2 >= 1 && e.atkCd <= 0 && Math.random() < .3){ e.state = 'backstep'; e.st = 0; sfx.unsheath(); } // 돌진 거리 안쪽 (같은 사거리): 30% 물러나며 피하고 → 땅을 베어 충격파
     else if (s2 >= 1 && e.atkCd <= 0){ e.state = 'x1wind'; e.st = 0; e.xLen = 0; }                        //                            70% 연속 베기 (내리치기 → 돌며 베기 → 도약 사선 베기, 가끔 1·2타에서 끝)
