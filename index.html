@@ -31,6 +31,9 @@ canvas{display:block}
 #cross::before{left:12px;top:0;width:2px;height:26px}
 #cross::after{top:12px;left:0;height:2px;width:26px}
 #cross.hit::before,#cross.hit::after{background:var(--accent)}
+#cross{transition:transform .07s ease-out}
+#cross.hit.big{transform:scale(1.45)}
+#cross.hit.big::before,#cross.hit.big::after{box-shadow:0 0 6px var(--accent)}
 #scope{position:fixed;inset:0;z-index:3;pointer-events:none;opacity:0;transition:opacity .12s;background:radial-gradient(circle at center,transparent 0,transparent 34vmin,rgba(10,6,12,.96) 34.4vmin)}
 #scope::before,#scope::after{content:"";position:absolute;background:rgba(10,6,12,.9)}
 #scope::before{left:50%;top:calc(50% - 34vmin);width:1px;height:68vmin}
@@ -251,7 +254,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.06 · 694b10</div>
+<div id="buildVer" class="hud">v2026.11.06 · 1831c8</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -381,7 +384,7 @@ if (!isTouch){
 
 // ---------- 소리 ----------
 let actx=null, master=null, musicGain=null, sfxGain=null, noiseBuf=null, muted=false, lastHurt=0;
-let musicBuf=null, musicSrc=null, musicLoading=false, lastClang=0;
+let musicBuf=null, musicSrc=null, musicLoading=false, lastClang=0, lastHitS=0;
 // ---------- 합성 샘플: 녹음(BFG-50)의 소리 구조를 분석해 코드로 만든 .50 BMG 총성·노리쇠 소리 ----------
 // 분석: 총성 = 아주 짧은 광대역 파열음 → 200ms 이상 꽉 찬 폭음(저음 65~75Hz·115Hz가 강함) → 0.6초쯤 높은 대역 메아리 → 낮게 깔리는 긴 잔향
 //       노리쇠 당기기 = 3~5.7kHz 금속성 딸깍 두 번 사이에 긁히는 소리, 밀기 = 2.1kHz 미끄러짐 → 2.07k·6.28kHz 철컥 → 끝 딸깍
@@ -533,6 +536,8 @@ const sfx = {
   pumpFwd(){ if (playSample('boltFwd', .25, 1.25 + Math.random()*.06, 0, false, .24)) return; noise(.05, 2400, 1.8, .45, 'bandpass'); tone('square', 620, 880, .03, .12); tone('triangle', 1800, 1600, .03, .08, .02); }, // 앞으로 '착'
   shellOut(){ const f = 2600 + Math.random()*500; tone('triangle', f, f*.96, .05, .06, .02); tone('sine', f*1.55, f*1.5, .04, .035, .03); }, // 탄피가 튀어나오는 '팅'
   hit(){ tone('triangle', 1400, 900, 0.06, 0.25); },
+  hitFlesh(){ if (!actx || actx.currentTime - lastHitS < .035) return; lastHitS = actx.currentTime; const k = .92 + Math.random()*.16; noise(.07, 900*k, .8, .45); tone('sine', 190*k, 90*k, .07, .3); tone('triangle', 1400*k, 900*k, .05, .12); }, // 둔탁한 '퍽' (연사 땐 묶고 음높이를 조금씩)
+  hitArmor(){ if (!actx || actx.currentTime - lastHitS < .035) return; lastHitS = actx.currentTime; const k = .92 + Math.random()*.16; tone('square', 2300*k, 1700*k, .05, .1); tone('sine', 3400*k, 3000*k, .09, .07, .01); noise(.05, 5200*k, 3, .2, 'bandpass'); }, // 금속성 '깡'
   crit(){ tone('triangle', 1800, 1200, 0.08, 0.3); tone('sine', 2600, 2200, 0.06, 0.15, 0.03); },
   kill(){ noise(0.35, 900, 1, 0.5); tone('sawtooth', 420, 60, 0.35, 0.25); },
   enemyShot(dist){ tone('sine', 700, 250, 0.18, Math.max(0.04, 0.3 - dist*0.01)); },
@@ -2423,7 +2428,7 @@ function updateAirship(e, dt, p){
     }
     return;
   }
-  if (e.flash > 0){ e.flash -= dt; tint(e, 0xffffff); } else tint(e, 0x000000);
+  glowTint(e, dt, 0x000000);
 }
 function shootDownAirship(e){ // 격추 시작: 근접병은 강하, 나머지(궁수·기수)는 함께 추락
   e.dying = true; e.rollT = 99; e.fallV = 0;
@@ -2628,7 +2633,7 @@ function shoot(){
   const targets = obMeshes.concat(ground); enemies.forEach(e=>{ if (Combat.targetable(e, 'ray')) targets.push(...e.parts); }); // 구르는 회피형은 총알이 통과
   const from = new THREE.Vector3(); flash.getWorldPosition(from);
   const spread = scoped ? W.spread*(1 - (W.aimCut || 0)) : W.spread; // 조준하면 부품에 따라 덜 퍼짐
-  const dmgMap = new Map(); let anyHit=false, anyCrit=false, critE=null; const critP = new THREE.Vector3();
+  const dmgMap = new Map(); let anyHit=false, anyCrit=false, anyArmor=false, critE=null; const critP = new THREE.Vector3();
   ray.far = W.range;
   const pellets = W.pellets + (activeKey === 'shotgun' && !W.slug ? 4*up.pellets : 0) + (rifleBuffT > 0 && !W.special && Math.random() < Math.min(.9, .4*(W.skillMul || 1)) ? 1 : 0); // 연사 스킬: 40% 확률로 한 발 더
   const heavyShell = shellCharges > 0 && !W.special; if (heavyShell){ shellCharges--; updateSkillUI(); }
@@ -2654,7 +2659,7 @@ function shoot(){
       const crit = h.object.userData.head === true;
       let d = W.dmg * (crit ? 2 : 1); // dmgMul은 Combat이 곱함
       if (W.falloff && h.distance > W.falloff) d *= 0.4;
-      if (e.type === 'knight') sparkAt(h.point); // 갑옷에 맞은 자리에 불꽃
+      hitChips(h.point, e, d*dmgMul()); if (e.boss || e.type === 'heavy') anyArmor = true; // 맞은 자리에 조각·불꽃
       dmgMap.set(e, (dmgMap.get(e)||0) + d); anyHit = true; if (crit) anyCrit = true;
       if (crit && !critE){ critE = e; critP.copy(h.point); }
       if (crit && e.boss) bossHeadHit(e);
@@ -2689,8 +2694,8 @@ function shoot(){
     }
   }
   if (anyHit){
-    anyCrit ? sfx.crit() : sfx.hit();
-    $('cross').classList.add('hit'); setTimeout(()=>$('cross').classList.remove('hit'), 90);
+    anyCrit ? sfx.crit() : anyArmor ? sfx.hitArmor() : sfx.hitFlesh(); // 갑옷은 금속성 '깡', 그 밖엔 둔탁한 '퍽'
+    let tot = 0; dmgMap.forEach(v => tot += v); hitMarker(anyCrit || tot*dmgMul() >= 4); // 강한 한 방(헤드샷·저격 등)은 조준점 표시를 크게
   }
   let rm = 1; // .50 BMG: 연달아 쏠수록 반동이 점점 커짐 (쉬면 서서히 회복)
   if (!W.special && gear[activeKey] && gear[activeKey].eq.ammo === 'bmg50'){ rm = 1 + .4*bmgStack; bmgStack = Math.min(5, bmgStack + 1); }
@@ -2715,8 +2720,67 @@ function combatCtx(){ // Combat이 읽는 게임 상태
     execTarget: exec ? exec.e : null,
   };
 }
-function applyHit(e, r){ // Combat.hit 결과를 게임에 적용
+// ---------- 피격 반응: 쌓였다 빠르게 빠지는 번쩍임(최대 60%) + 상체 움찔 + 맞은 자리 효과 ----------
+// 연사로 맞는 간격이 번쩍임 시간보다 짧아도 흰색으로 굳지 않게, 피해가 클수록 크게 (보스는 움찔을 약하게, 밀림 없음)
+const HF = {glowMax:.6, glowDecay:14, flinchMax:.42, flinchDecay:10, pushMax:.09};
+function hitFeedback(e, dealt, from){
+  if (!e.g) return;
+  e.hitGlow = Math.min(HF.glowMax, (e.hitGlow || 0) + clamp(.08 + .09*dealt, .1, .6)); // 약한 연사는 조금씩, 강한 한 방은 크게
+  if (!e.chest) return;
+  const src = from && from.x !== undefined ? from : yawObj.position;
+  let dx = e.g.position.x - src.x, dz = e.g.position.z - src.z; const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d; // 맞은 쪽에서 밀려나는 방향
+  const c = Math.cos(e.yaw || 0), sn = Math.sin(e.yaw || 0), lx = c*dx - sn*dz, lz = sn*dx + c*dz; // 몸 기준 (+z가 앞)
+  const big = e.boss ? .35 : 1, a = clamp(.05 + .04*dealt, .05, .28)*big;
+  e.flX = (e.flX || 0) + lz*a; e.flZ = (e.flZ || 0) - lx*a;                                // 밀리는 쪽으로 상체가 젖혀짐
+  const m = Math.hypot(e.flX, e.flZ); if (m > HF.flinchMax){ e.flX *= HF.flinchMax/m; e.flZ *= HF.flinchMax/m; }
+  if (!e.boss){ const pa = clamp(.03 + .012*dealt, .03, HF.pushMax); e.pX = clamp((e.pX || 0) + lx*pa, -HF.pushMax, HF.pushMax); e.pZ = clamp((e.pZ || 0) + lz*pa, -HF.pushMax, HF.pushMax); }
+}
+function undoFlinch(e){ // 지난 프레임에 더한 움찔을 빼서 애니메이션이 깨끗한 자세에서 시작하게
+  const A = e.flApplied; if (!A) return;
+  if (e.chest){ e.chest.rotation.x -= A.x; e.chest.rotation.z -= A.z; }
+  if (e.rig){ e.rig.position.x -= A.px; e.rig.position.z -= A.pz; }
+  e.flApplied = null;
+}
+function applyFlinch(e, dt){ // 움찔을 줄여 가며(스프링처럼 돌아옴) 이번 프레임 자세에 더함
+  if (!e.chest || !e.rig) return;
+  const k = Math.exp(-HF.flinchDecay*dt);
+  e.flX = (e.flX || 0)*k; e.flZ = (e.flZ || 0)*k; e.pX = (e.pX || 0)*k; e.pZ = (e.pZ || 0)*k;
+  if (Math.abs(e.flX) + Math.abs(e.flZ) + Math.abs(e.pX) + Math.abs(e.pZ) < 1e-4){ e.flX = e.flZ = e.pX = e.pZ = 0; return; }
+  e.chest.rotation.x += e.flX; e.chest.rotation.z += e.flZ; e.rig.position.x += e.pX; e.rig.position.z += e.pZ;
+  e.flApplied = {x:e.flX, z:e.flZ, px:e.pX, pz:e.pZ};
+}
+function glowTint(e, dt, base){ // 바탕 색(화상·둔화·버프 등)에서 흰색 쪽으로 번쩍임 세기만큼
+  if (e.flash > 0) e.flash = 0; // Combat의 번쩍임 신호는 hitFeedback이 받아 씀
+  let g = e.hitGlow || 0; if (g > 0){ g *= Math.exp(-HF.glowDecay*dt); if (g < .01) g = 0; e.hitGlow = g; }
+  if (!g) return tint(e, base);
+  const r = (base >> 16) & 255, gg = (base >> 8) & 255, b = base & 255, w = g*.7, L = v => Math.round(v + (255 - v)*w); // 밝은 색 적도 하얗게 뜨지 않게 70%만
+  tint(e, (L(r) << 16) | (L(gg) << 8) | L(b));
+}
+let chipBudget = 24; // 이번 프레임에 더 만들 수 있는 맞은 자리 조각 수 (연사 때 너무 많이 생기지 않게, update에서 다시 채움)
+function hitChips(pt, e, dealt){ // 총알이 맞은 자리: 갑옷(보스·중갑)은 금속 불꽃, 그 밖엔 옷 색 조각 + 흙먼지
+  const armored = e.boss || e.type === 'heavy', n = Math.min(chipBudget, armored ? 4 : clamp(2 + Math.round(dealt), 2, 6)); if (n <= 0) return;
+  chipBudget -= n;
+  for (let i = 0; i < n; i++){
+    const col = armored ? (i % 2 ? 0xffe08a : 0xfff4d0) : (i % 3 === 2 ? 0xcbb59a : e.def.color);
+    const m = new THREE.Mesh(burstBoxGeo, new THREE.MeshBasicMaterial({color:col, transparent:true, blending: armored ? THREE.AdditiveBlending : THREE.NormalBlending, depthWrite:!armored}));
+    m.scale.setScalar(armored ? .035 : .06 + Math.random()*.04); m.position.copy(pt); scene.add(m);
+    const sp = armored ? 5 : 3;
+    bits.push({m, v:new THREE.Vector3((Math.random() - .5)*sp, Math.random()*sp*.8, (Math.random() - .5)*sp), life: armored ? .25 + Math.random()*.15 : .4 + Math.random()*.2});
+  }
+}
+function slashMark(e, ang){ // 근접: 칼이 지나간 자리에 짧게 남는 베인 자국 (화면을 향한 가는 빛줄기)
+  const m = new THREE.Mesh(telegGeo, new THREE.MeshBasicMaterial({color:0xfff1d8, transparent:true, opacity:.85, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide}));
+  const S = e.def.scale; m.position.set(e.g.position.x, e.ch*1.05, e.g.position.z);
+  m.quaternion.copy(camera.getWorldQuaternion(new THREE.Quaternion())); m.rotateX(Math.PI/2); m.rotateY(ang || 0);   // 화면을 향하고 베는 방향으로
+  m.scale.set(1.3*S, 1, .045*S); scene.add(m); bossFx.push({m, life:.22, max:.22, grow:0, op:.9});
+}
+function hitMarker(big){ // 조준점 표시: 강한 한 방은 더 크게 오래
+  const c = $('cross'); c.classList.add('hit'); c.classList.toggle('big', !!big);
+  clearTimeout(hitMarker.t); hitMarker.t = setTimeout(() => c.classList.remove('hit', 'big'), big ? 170 : 90);
+}
+function applyHit(e, r, from){ // Combat.hit 결과를 게임에 적용
   if (!r.applied) return r;
+  if (e.flash > 0) hitFeedback(e, r.dealt || 0, from); // 번쩍임이 있는 공격만 (화상·화염은 화상 빛으로)
   if (e.boss) updateBossBar(e);
   if (r.heal) hp = Math.min(maxHp(), hp + r.heal);
   if (r.killed) applyKill(e, r.kill);
@@ -2727,7 +2791,7 @@ function applyHit(e, r){ // Combat.hit 결과를 게임에 적용
 function hitEnemy(e, base, kind, from, finisher){
   if (sanct && sanct.on && sanct.e === e) return sanctHit(e, base, kind); // 기사의 성역: 몸은 피해 면역, 근접 공격은 노린 표식에
   if (e.type === 'knight' && e.state === 'backstep') return {applied:false, dealt:0, shielded:false, heal:0, killed:false, kill:null}; // 기사가 뒤로 뛰어 피하는 중
-  return applyHit(e, Combat.hit(e, {base, kind, from, finisher}, combatCtx())); } // finisher: 처형의 마지막 일격 (처형 중인 적은 그 전엔 죽지 않음)
+  return applyHit(e, Combat.hit(e, {base, kind, from, finisher}, combatCtx()), from); } // finisher: 처형의 마지막 일격 (처형 중인 적은 그 전엔 죽지 않음)
 let adsK = 0; // 0 = 허리 사격 자세, 1 = 조준기를 눈앞에 댄 자세
 const ADS_Z = -.36;
 let dualLeft = false, dualKickR = 0, dualKickL = 0; // 조준기가 눈에서 떨어진 거리 (멀수록 화면을 덜 가림)
@@ -2969,7 +3033,7 @@ function updateThief(e, dt, p, dist){
   if (r.escaped) return;
   g.position.y = 0; g.rotation.set(0, e.yaw, 0);
   animateSoldier(e, dt, 99);
-  if (e.flash > 0){ e.flash -= dt; tint(e, 0xffffff); } else tint(e, e.slowT > 0 ? 0x1c3a66 : 0x000000);
+  glowTint(e, dt, e.slowT > 0 ? 0x1c3a66 : 0x000000);
 }
 const {setBossState} = Enemies; // 보스 상태 전환 (enemies.js)
 // 보스(철의 거인): 상태 머신은 Enemies.bossStep(enemies.js)이 정하고, 여기서는 그리기와 효과만
@@ -4050,7 +4114,7 @@ function updateKnight(e, dt, p){
   else if (['sstomp', 'stap', 'sflinch'].includes(e.state)) knightSanct(e, dt, p);
   else knightCharge(e, dt, p, f);
   knightPauldrons(e);
-  if (e.flash > 0){ e.flash -= dt; tint(e, 0xffffff); } else tint(e, 0x000000); // 피격: 하얗게 번쩍 (다른 적과 같게)
+  glowTint(e, dt, 0x000000); // 피격: 쌓였다 빠지는 번쩍임 (다른 적과 같게)
   updateBossBar(e);
 }
 function updateBoss(e, dt, p, dist, canSee){
@@ -4060,7 +4124,7 @@ function updateBoss(e, dt, p, dist, canSee){
   g.position.y = e.state === 'leap' ? e.leapY : 0; g.rotation.set(0, e.yaw, 0);
   animateSoldier(e, dt, dist);
   if (e.shieldFx) e.shieldFx.material.opacity = e.state === 'deflect' ? .3 + .2*Math.sin(performance.now()/70) : 0;
-  if (e.flash > 0){ e.flash -= dt; tint(e, 0xffffff); } else tint(e, e.burn > 0 ? 0x8a3000 : e.state === 'stun' ? 0x202a40 : e.enraged ? (Math.sin(performance.now()/180) > 0 ? 0x4a0a00 : 0x2a0400) : 0x000000);
+  glowTint(e, dt, e.burn > 0 ? 0x8a3000 : e.state === 'stun' ? 0x202a40 : e.enraged ? (Math.sin(performance.now()/180) > 0 ? 0x4a0a00 : 0x2a0400) : 0x000000);
   if (e.enraged && Math.random() < dt*10) emberAt(e); // 광폭화: 몸에서 붉은 불티가 피어오름
 }
 // 상태별 목표 자세를 정하고, 현재 자세를 그쪽으로 부드럽게 옮김
@@ -4499,12 +4563,12 @@ function doSwordHit(trailAng, mul = 1){ // mul: 발도 공격 등 피해 배수
     if ((dx*fx + dz*fz)/h < .45 && h > e.r + .4) continue; // 앞쪽 약 120도 범위
     if (footY > 2.2*e.def.scale) continue;
     if (e.groggyT > 0){ if (h < gd){ gd = h; gt = e; } continue; }
-    burst(e, 0xb0302a);
+    burst(e, 0xb0302a); slashMark(e, trailAng);
     if (hitEnemy(e, W.dmg*mul, 'slash', p).shielded) sfx.clang();
     any = true; addSkill(SKILL_GAIN.sword.hit);
   }
   if (gt) startExec(gt);
-  else if (any){ sfx.slashHit(); shakeT = Math.max(shakeT, W.great ? .09 : .05); if (W.great){ hitStopT = .04; sfx.bossSwing(.2); } $('cross').classList.add('hit'); setTimeout(()=>$('cross').classList.remove('hit'), 90); }
+  else if (any){ sfx.slashHit(); shakeT = Math.max(shakeT, W.great ? .09 : .05); if (W.great){ hitStopT = .04; sfx.bossSwing(.2); } hitMarker(W.great || mul > 1); }
 }
 // ---------- 레이피어: 탭 = 베기 + 정밀 흘리기, 누르고 있으면 좌우 베기 → 연속 찌르기 ----------
 // 정밀 흘리기: 공격 버튼을 한 번 누르면 패링 유예만큼 흘리기 창이 열림 (판정은 패링과 같음).
@@ -6474,6 +6538,8 @@ function update(dt){
   const eyeY = footY + 1.45;
   const pc = cellIdx(p.x, p.z);
   if (pc !== flowCell){ buildFlow(p.x, p.z); flowCell = pc; }
+  chipBudget = 24;
+  for (const e of enemies) undoFlinch(e); // 움찔은 애니메이션 위에 더하는 것이라, 지난 프레임 몫을 먼저 뺌
   for (const e of enemies.slice()){
     if (e.airship){ if (e.slowT > 0) e.slowT -= dt; updateAirship(e, dt, p); continue; }
     if (e.dropY > 0){ // 낙하산 강하 중
@@ -6501,7 +6567,7 @@ function update(dt){
       if (!(exec && exec.e === e)) e.groggyT -= dt;
       if (e.kneelT > 0) e.kneelT -= dt;
       if (e.react === 'down') downPose(e, dt); else if (e.boss && e.react) bossReact(e, dt); else if (e.type === 'knight') knightGroggy(e, dt); else groggyPose(e, dt);
-      if (e.flash > 0){ e.flash -= dt; tint(e, 0xffffff); } else tint(e, 0x3a3000);
+      glowTint(e, dt, 0x3a3000);
       continue;
     }
     if (e.stars && e.stars.visible) e.stars.visible = false;
@@ -6524,12 +6590,12 @@ function update(dt){
     // 몸 방향과 관절 애니메이션, 색
     g.position.y = 0; g.rotation.set(0, e.yaw, 0);
     animateSoldier(e, dt, dist);
-    if (e.flash>0){ e.flash-=dt; tint(e, 0xffffff); }
-    else tint(e, e.burn>0 ? 0x8a3000 : e.slowT > 0 ? 0x1c3a66 : e.buffT > 0 ? 0x3a2a00 : 0x000000);
+    glowTint(e, dt, e.burn>0 ? 0x8a3000 : e.slowT > 0 ? 0x1c3a66 : e.buffT > 0 ? 0x3a2a00 : 0x000000);
     Enemies.attack(e, dt, {dist, canSee, footY, rng: Math.random, wave, melee: MELEE[e.type], edm: edm(),
       ARCH_MAX, AIM_TIME, fx: soldierFx(g, p, chestY, eyeY)});
     if (state!=='play') return;
   }
+  for (const e of enemies) if (!e.airship) applyFlinch(e, dt); // 피격 움찔 (그리기 직전에 더함)
 
   // 적 탄환
   for (let i=shots.length-1;i>=0;i--){
