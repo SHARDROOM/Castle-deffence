@@ -251,7 +251,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.06 · 3fbe18</div>
+<div id="buildVer" class="hud">v2026.11.06 · 24d72a</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -2489,6 +2489,7 @@ const AM = {shaft:new THREE.MeshLambertMaterial({color:0x7a5230}),
 // 여러 적이 함께 쓰는 상자 모양(SG)·화살(AG·AM)·바닥 무늬(TEX)는 그대로 둠 (다시 쓰면 셰이더를 새로 만들어야 해서 멈칫함)
 function disposeEnemy(e){
   if (!e || !e.g || e.disposed) return; e.disposed = true;
+  if (e.type === 'knight') clearKnightTrail();                                                   // 휘두르는 도중에 쓰러지면 칼 잔상이 남지 않게
   const keepGeo = new Set([...Object.values(SG), ...Object.values(AG)]), keepMat = new Set(Object.values(AM)), keepTex = new Set(Object.values(TEX));
   const mats = new Set();
   e.g.traverse(o => {
@@ -3144,6 +3145,7 @@ function knightWalkBody(e, mv, dt){
 }
 // 기사 칼 잔상: 칼이 실제로 지나간 자리(칼 밑동~끝)를 따라 짧게 남김
 let kTrail = null;
+function clearKnightTrail(){ if (!kTrail) return; kTrail.pts.length = 0; kTrail.mesh.material.opacity = 0; kTrail.mesh.visible = false; } // 기사가 사라지거나 새 판: 휘두르던 잔상이 남지 않게
 function knightTrail(e, on, dt){
   if (!kTrail){
     const N = 14, geo = new THREE.BufferGeometry(), idx = [];
@@ -4051,7 +4053,7 @@ function animateBoss(e, dt){
 function resetBoss(){
   if (droppedShield){ scene.remove(droppedShield); droppedShield = null; }
   rbullets.forEach(b => scene.remove(b.m)); rbullets.length = 0;
-  bossFx.forEach(f => scene.remove(f.m)); bossFx.length = 0; clearKnightWaves(); clearSanct();
+  bossFx.forEach(f => { scene.remove(f.m); disposeFx(f.m); }); bossFx.length = 0; clearKnightWaves(); clearSanct(); clearKnightTrail(); // 지난 판의 갈라진 땅·충격파·칼 잔상
   bossTeleg.visible = false; $('bossBar').classList.add('hide'); $('bossBar').classList.remove('enraged'); $('bossBar').querySelector('.bn').textContent = '철의 거인';
   slowT = 0; shakeT = 0; $('slowFx').style.opacity = 0;
 }
