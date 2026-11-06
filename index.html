@@ -254,7 +254,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.06 · 619b74</div>
+<div id="buildVer" class="hud">v2026.11.06 · 7a73bb</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3693,7 +3693,7 @@ function startBossCam(e){
   const eye = camera.getWorldPosition(new THREE.Vector3()), q = camera.getWorldQuaternion(new THREE.Quaternion());
   const look0 = eye.clone().add(new THREE.Vector3(0, 0, -10).applyQuaternion(q));
   const hero = makePlayerModel().setWeapon(activeKey); scene.add(hero.root);                     // 3인칭으로 보이는 플레이어 모습 (장착한 무기·부품 그대로)
-  bossCam = {e, t:0, fov:75, eye, look0, hero, side:Math.random() < .5 ? -1 : 1}; e.introWait = true; // 줌인될 때까지 칼 뽑기를 미룸
+  bossCam = {e, t:0, fov:75, eye, look0, hero, side:-1}; e.introWait = true; // 줌인될 때까지 칼 뽑기를 미룸. side -1: 늘 플레이어의 왼쪽 어깨 너머로
   firing = false; setScope(false); gun.visible = false;
   $('cine').classList.add('on'); document.body.classList.add('cinema');                       // 위아래 검은 띠, UI 숨김
 }
