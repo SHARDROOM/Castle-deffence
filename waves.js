@@ -10,7 +10,7 @@
   'use strict';
 
   const CLEAR_DELAY = 1.8;          // 웨이브 클리어 후 다음 웨이브까지 (초, 게임 시간)
-  const ENTRANCE = 4.6;             // 왕국의 마지막 기사 등장 연출(칼 뽑기, 카메라 연출 4.5초) 동안 다른 적은 기다렸다가 나옴
+  const ENTRANCE = 6.3;             // 왕국의 마지막 기사 등장 연출(카메라 연출 6.2초: 플레이어를 비춘 뒤 기사 클로즈업에서 칼 뽑기) 동안 다른 적은 기다렸다가 나옴
   const FIRST_THIEF = 60;           // 판 시작 후 첫 도둑 판정까지
   const isBossWave = w => w % 5 === 0;           // 5웨이브마다 철의 거인
   const isEnraged = w => Math.floor(w / 5) >= 2; // 10웨이브부터 광폭화한 철의 거인
