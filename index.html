@@ -251,7 +251,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.06 · ee1fc3</div>
+<div id="buildVer" class="hud">v2026.11.06 · 694b10</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3276,11 +3276,11 @@ function knightCharge(e, dt, p, f){
     knightHoldT(e, khBlend(KH.follow, KH_STANCE(), k), bodyYaw(e)*(1 - k));
     knightTrail(e, false, dt);
     if (t >= KC.recover){ e.state = 'guard'; e.st = .8; e.atkCd = KC.cd; }
-  } else if (e.state === 'rise'){ // 그로기에서 회복: 칼을 뽑아 들며 천천히 일어나 기본 자세로
+  } else if (e.state === 'getup'){ // 그로기에서 회복: 칼을 뽑아 들며 천천히 일어나 기본 자세로 (연속 베기의 도약 'rise'와 이름이 겹쳐 도약 사선 베기로 이어지던 것을 나눔)
     const k = easeIO(Math.min(1, t/KN_RISE)), b = kbBlend(KB_KNEEL, KB.stance, k);
     knightBody(e, b, kDamp(14, dt)); knightHoldT(e, khBlend(KH_PLANT, KH_STANCE(), k), 0);
     if (t >= KN_RISE){ e.state = 'guard'; e.st = .8; e.atkCd = Math.max(e.atkCd || 0, 1); }
-  } else if (e.state === 'stun'){ e.state = 'rise'; e.st = 0; knightTrail(e, false, dt); }
+  } else if (e.state === 'stun'){ e.state = 'getup'; e.st = 0; e.g.position.y = 0; knightTrail(e, false, dt); }
   else { e.state = 'guard'; e.st = .8; } // 그 밖: 기본 자세로
 }
 // ---------- 왕국의 마지막 기사: 가까우면 물러나며 피하고 → 땅을 베어 부채꼴 충격파 ----------
@@ -4741,7 +4741,7 @@ function startExec(e){
   // 모든 처형은 같은 방향·거리에서: 적은 플레이어 쪽으로 몸을 돌리고, 플레이어는 적 정면의 정해진 거리로 옮겨 감
   const p = yawObj.position, dx = p.x - e.g.position.x, dz = p.z - e.g.position.z, d = Math.hypot(dx, dz) || 1;
   Object.assign(exec, {fx:dx/d, fz:dz/d, d0:d});
-  if (e.boss && e.type !== 'knight'){ // 보스 전용 처형 (왕국의 마지막 기사는 아직 전용 처형이 없어 일반 처형)
+  if (e.boss){ // 보스 전용 처형 (철의 거인·왕국의 마지막 기사 같은 처형)
     Object.assign(exec, {boss:true, y:0, ev:0, rapier: !!W.rapier, great: !!W.great});
     e.react = 'pre'; e.reactT = 0;
   } else if (W.rapier) exec.rapier = true; // 레이피어: 머리 → 가슴 찌르고 다리 베기
@@ -4777,10 +4777,10 @@ function rbTargets(e){ // 몸통 위 네 곳: 세계 좌표(w)와 화면 기준 
 function updateRapierBossExec(dt){
   const x = exec, e = x.e, p = yawObj.position, alive = enemies.includes(e);
   x.t += dt; const t = x.t, S = e.def.scale, torsoY = 1.13*S, bx = e.g.position.x, bz = e.g.position.z;
-  let dist; x.y = 0; // 도약 없이 땅에서
-  if (t < .45) dist = lerp(x.d0, 3.1, ease(t/.45));                                             // 달려듦
-  else if (t < RB.vSlash + .12) dist = 3.1;                                                    // 그 자리에서 찌르고 벰
-  else dist = lerp(3.1, 3.5, ease(Math.min(1, (t - RB.vSlash - .12)/(RB.land - RB.vSlash - .12)))); // 한 걸음 물러남
+  let dist; x.y = 0; const Z = S/2.2; // 도약 없이 땅에서, 거리는 보스 크기에 맞춤
+  if (t < .45) dist = lerp(x.d0, 3.1*Z, ease(t/.45));                                           // 달려듦
+  else if (t < RB.vSlash + .12) dist = 3.1*Z;                                                  // 그 자리에서 찌르고 벰
+  else dist = lerp(3.1*Z, 3.5*Z, ease(Math.min(1, (t - RB.vSlash - .12)/(RB.land - RB.vSlash - .12)))); // 한 걸음 물러남
   p.x = bx + x.fx*dist; p.z = bz + x.fz*dist; if (alive) execFace(x, e, dt);
   const eye = x.y + 1.6, lookY = t < RB.vSlash + .12 ? torsoY : 1.1*S;
   let d = Math.atan2(-(bx - p.x), -(bz - p.z)) - yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -4819,12 +4819,13 @@ function updateBossExec(dt){
   if (exec.great) return updateGreatBossExec(dt);
   const x = exec, e = x.e, p = yawObj.position, alive = enemies.includes(e);
   x.t += dt; const t = x.t, S = e.def.scale, headY = 1.74*S, bx = e.g.position.x, bz = e.g.position.z;
+  const Z = S/2.2; // 거리는 보스 크기에 맞춤 (철의 거인 2.2 기준, 더 큰 기사는 그만큼 떨어져 갑옷 속에 파묻히지 않게)
   let dist;
-  if (t < .35){ dist = lerp(x.d0, 2.4, ease(t/.35)); x.y = 0; }                                         // 달려듦
-  else if (t < .75){ const k = (t - .35)/.4; dist = lerp(2.4, 1.35, k); x.y = lerp(0, headY - 1.7, ease(k)) + Math.sin(k*Math.PI)*.4; } // 뛰어오름
-  else if (t < 1.35){ dist = 1.35; x.y = headY - 1.7; }                                                   // 투구에 매달림
-  else if (t < 1.85){ const k = (t - 1.35)/.5; dist = lerp(1.35, 2.8, k); x.y = lerp(headY - 1.7, 0, k*k); } // 베면서 내려옴
-  else { dist = 2.8; x.y = 0; }
+  if (t < .35){ dist = lerp(x.d0, 2.4*Z, ease(t/.35)); x.y = 0; }                                         // 달려듦
+  else if (t < .75){ const k = (t - .35)/.4; dist = lerp(2.4*Z, 1.35*Z, k); x.y = lerp(0, headY - 1.7, ease(k)) + Math.sin(k*Math.PI)*.4; } // 뛰어오름
+  else if (t < 1.35){ dist = 1.35*Z; x.y = headY - 1.7; }                                                   // 투구에 매달림
+  else if (t < 1.85){ const k = (t - 1.35)/.5; dist = lerp(1.35*Z, 2.8*Z, k); x.y = lerp(headY - 1.7, 0, k*k); } // 베면서 내려옴
+  else { dist = 2.8*Z; x.y = 0; }
   p.x = bx + x.fx*dist; p.z = bz + x.fz*dist; if (alive) execFace(x, e, dt);
   const lookY = t < 1.4 ? headY : 1.1*S, eye = x.y + 1.6;
   let d = Math.atan2(-(bx - p.x), -(bz - p.z)) - yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -5006,11 +5007,11 @@ const GB = {swing:.78, raise:1.0, hold:1.45, down:4.0, end:4.8};
 function updateGreatBossExec(dt){
   const x = exec, e = x.e, p = yawObj.position, alive = enemies.includes(e);
   x.t += dt; const t = x.t, S = e.def.scale, bx = e.g.position.x, bz = e.g.position.z;
-  let dist; x.y = 0;
-  if (t < .4) dist = lerp(x.d0, 3.6, ease(t/.4));                                   // 달려듦
-  else if (t < GB.raise) dist = 3.6;                                                // 휘두름
-  else if (t < GB.hold) dist = lerp(3.6, 2.9, ease((t - GB.raise)/(GB.hold - GB.raise))); // 쓰러진 거인 앞으로 한 걸음
-  else dist = 2.9;
+  let dist; x.y = 0; const Z = S/2.2; // 보스 크기에 맞춘 거리 (철의 거인 2.2 기준)
+  if (t < .4) dist = lerp(x.d0, 3.6*Z, ease(t/.4));                                 // 달려듦
+  else if (t < GB.raise) dist = 3.6*Z;                                              // 휘두름
+  else if (t < GB.hold) dist = lerp(3.6*Z, 2.9*Z, ease((t - GB.raise)/(GB.hold - GB.raise))); // 쓰러진 거인 앞으로 한 걸음
+  else dist = 2.9*Z;
   p.x = bx + x.fx*dist; p.z = bz + x.fz*dist; if (alive) execFace(x, e, dt);
   const eye = 1.6, lookY = t < GB.swing + .1 ? 1.1*S : .3*S;                       // 휘두를 땐 몸통, 넘어진 뒤엔 바닥
   let d = Math.atan2(-(bx - p.x), -(bz - p.z)) - yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
