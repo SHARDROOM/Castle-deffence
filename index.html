@@ -251,7 +251,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.06 · 99ba1c</div>
+<div id="buildVer" class="hud">v2026.11.06 · 950512</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -2037,13 +2037,13 @@ function makeSoldier(type){
     swd(bx(.05, 1.5, .17), steelK, 0, -.8, 0, kBlade); swd(bx(.02, 1.46, .04), M(0xf4f7fa), 0, -.8, -.09, kBlade);
     swd(bx(.05, .18, .12), steelK, 0, -1.6, 0, kBlade).rotation.x = -.5;
     // 칼집에 꽂힌 자리 (허리 칼집과 같은 위치·기울기, 크기는 그대로): 등장할 때 여기서 뽑음
-    const kSheath = new THREE.Object3D(); kSheath.position.set(-.36, -.02, -.02); kSheath.rotation.set(.14, 0, -.08); rig.add(kSheath); // 허리 칼집 (뽑을 때 왼손으로 앞으로 기울이고 뒤로 밂)
-    kSword.position.y = .62; kBlade.scale.y = .45; kSheath.add(kSword);                                   // 칼날은 칼집 안에 (보이는 길이만큼)
+    const kSheath = new THREE.Object3D(); kSheath.position.set(-.36, -.02, -.02); kSheath.rotation.set(1.1, 0, -.12); rig.add(kSheath); // 허리 칼집 (뽑을 때 왼손으로 앞으로 기울이고 뒤로 밂)
+    kSword.position.y = .62; kSheath.add(kSword);                                                         // 칼날은 제 길이 그대로 칼집 안에
     // 허리 칼집 (왼쪽 허리, 비어 있음)
-    const hip = new THREE.Group(); hip.scale.set(1, .6, 1); // 칼집 모양 (kSheath에 붙어 함께 움직임). 다리 옆으로 조금 뒤로 기울여, 끝이 무릎 아래쯤에서 끝나게
+    const hip = new THREE.Group(); hip.scale.set(1, 1.14, 1); // 칼집 모양 (kSheath에 붙어 함께 움직임). 칼날·칼끝 길이에 맞춤 (칼날을 줄여 숨기지 않음)
     const hipAdd = (geo, m, y) => { const o = new THREE.Mesh(geo, m); o.position.y = y; hip.add(o); return o; };
     hipAdd(bx(.09, 1.45, .2), leather, -.72); hipAdd(bx(.11, .12, .22), gold, -.02); hipAdd(bx(.11, .14, .22), gold, -1.42); hipAdd(bx(.1, .3, .21), goldD, -.6);
-    const KS_ROT = new THREE.Euler(.14, 0, -.08), KS_POS = new THREE.Vector3(-.36, -.02, -.02); // 다리 옆으로 거의 곧게 늘어뜨림 (뒤로 꼬리처럼 뻗지 않게)
+    const KS_ROT = new THREE.Euler(1.1, 0, -.12), KS_POS = new THREE.Vector3(-.36, -.02, -.02); // 칼이 길어 곧게 늘어뜨리면 땅에 닿으므로 허리에서 뒤로 비스듬히 참
     kSheath.add(hip);
     S_extra = {swordTip: tipO, kSword, kBlade, kSheath, KS_ROT, KS_POS, kPaul};
     // 등에 멘 대검: 칼집째 비스듬히, 손잡이가 오른쪽 어깨 위로
@@ -4002,12 +4002,13 @@ function updateKnight(e, dt, p){
     if (t < D.clear){
       const k = ss((t - D.grab)/(D.lift - D.grab));
       pos = rest.pos.clone().lerp(held.pos, k).lerp(KS_DRAWN, ss((t - D.lift)/(D.clear - D.lift))*k); q = rest.q.clone().slerp(held.q, k);
+      pos.y += Math.sin(k*Math.PI)*.32;                                                         // 긴 칼집이 돌아 올라오는 동안 끝이 땅에 닿지 않게 살짝 들어 올리며
     } else {
       const k = ss((t - D.clear)/(D.back - D.clear));
       pos = KS_DRAWN.clone().lerp(rest.pos, k); pos.y += Math.sin(k*Math.PI)*.12; q = held.q.clone().slerp(rest.q, k);
     }
     e.kSheath.position.copy(pos); e.kSheath.quaternion.copy(q);
-    if (!e.cleared){ e.kSword.position.set(0, .62 + rel, 0); e.kBlade.scale.y = Math.min(1, .45 + rel/1.6); } // 칼집 안쪽 칼날은 안 보임
+    if (!e.cleared){ e.kSword.position.set(0, .62 + rel, 0); } // 칼날은 제 길이 그대로 칼집에서 빠져나옴
     e.g.updateMatrixWorld(true);
     // 왼손: 칼집 입구 바로 아래를 잡고 따라감 (잡기 전엔 다가가고, 칼집을 허리에 꽂은 뒤엔 놓음)
     const wL = t < D.grab ? ss(t/D.grab) : t < D.back ? 1 : 1 - ss((t - D.back)/(D.free - D.back));
