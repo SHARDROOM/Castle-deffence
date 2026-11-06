@@ -254,7 +254,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.06 · 10125b</div>
+<div id="buildVer" class="hud">v2026.11.06 · 874921</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -3693,7 +3693,7 @@ function startBossCam(e){
   const eye = camera.getWorldPosition(new THREE.Vector3()), q = camera.getWorldQuaternion(new THREE.Quaternion());
   const look0 = eye.clone().add(new THREE.Vector3(0, 0, -10).applyQuaternion(q));
   const hero = makePlayerModel().setWeapon(activeKey); scene.add(hero.root);                     // 3인칭으로 보이는 플레이어 모습 (장착한 무기·부품 그대로)
-  bossCam = {e, t:0, fov:75, eye, look0, hero, side:-1}; e.introWait = true; // 줌인될 때까지 칼 뽑기를 미룸. side -1: 늘 플레이어의 왼쪽 어깨 너머로
+  bossCam = {e, t:0, fov:75, eye, look0, hero, side:Math.random() < .5 ? -1 : 1}; e.introWait = true; // 줌인될 때까지 칼 뽑기를 미룸
   firing = false; setScope(false); gun.visible = false;
   $('cine').classList.add('on'); document.body.classList.add('cinema');                       // 위아래 검은 띠, UI 숨김
 }
@@ -3854,7 +3854,7 @@ function sanctTex(kind){ // 'field' = 바닥 성역 무늬, 'mark' = 성스러�
 }
 // 표식 자리: 뼈, 위치, 바깥 방향(n), 크기, 정면에서만 노릴 수 있는가 (몸통·등)
 function markSpots(e){
-  const HZ = .23*Math.cos(Math.PI/9), sx = -1; // 어깨 표식은 늘 왼쪽 어깨 (마주 볼 때 화면 왼쪽, kPaul[0])
+  const HZ = .23*Math.cos(Math.PI/9), sx = 1; // 어깨 표식은 늘 오른쪽 어깨 (마주 볼 때 화면 오른쪽, kPaul[1])
   return [
     {name:'머리', bone:e.neck, pos:[0, .46, HZ + .014], n:[0, 0, 1], s:.16},
     {name:sx < 0 ? '왼쪽 어깨' : '오른쪽 어깨', bone:e.kPaul[sx < 0 ? 0 : 1], pos:[sx*.05, .15, 0], n:[sx*.6, .8, 0], s:.22},
