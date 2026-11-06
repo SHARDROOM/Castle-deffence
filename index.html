@@ -251,7 +251,7 @@ body.editing [data-ctl].sel{outline:3px solid var(--accent)}
 <div id="dodge">회피!</div>
 <div id="notice"></div>
 <div id="ammo" class="hud"><div class="big" id="ammoTxt"></div><div class="small" id="gunName"></div><div class="small" id="skillTxt"></div></div>
-<div id="buildVer" class="hud">v2026.11.06 · 52784f</div>
+<div id="buildVer" class="hud">v2026.11.06 · 3fbe18</div>
 <div id="xpWrap" class="hud"><div id="xpLv">Lv 1</div><div class="xpbar"><div id="xpFill"></div></div></div>
 <div id="joyBase"><div id="joyKnob"></div></div>
 <div id="fire" class="btn" data-ctl>발사</div>
@@ -2418,7 +2418,7 @@ function updateAirship(e, dt, p){
     if (r.crashed){
       groundBurst(g.position.x, g.position.z, 16, 5); crackRing(g.position.x, g.position.z); sfx.bossSlam(); shakeT = Math.max(shakeT, .5);
       for (let i=0;i<14;i++){ const m = new THREE.Mesh(new THREE.BoxGeometry(.3,.3,.3), new THREE.MeshBasicMaterial({color: i % 2 ? 0xff8a3a : 0xffd166, transparent:true})); m.position.copy(g.position); m.position.y = 1; scene.add(m); bits.push({m, v:new THREE.Vector3((Math.random() - .5)*9, Math.random()*8, (Math.random() - .5)*9), life:.7}); }
-      scene.remove(g); enemies.splice(enemies.indexOf(e), 1); updateHUD(); if (Combat.isWaveCleared(enemies, e)) onWaveCleared();
+      scene.remove(g); enemies.splice(enemies.indexOf(e), 1); disposeEnemy(e); updateHUD(); if (Combat.isWaveCleared(enemies, e)) onWaveCleared();
     }
     return;
   }
@@ -2485,6 +2485,24 @@ AG.shaft.rotateX(Math.PI/2); AG.tip.rotateX(Math.PI/2);
 const AM = {shaft:new THREE.MeshLambertMaterial({color:0x7a5230}),
             tip:new THREE.MeshLambertMaterial({color:0xc9ced6, emissive:0x2a2c30}),
             fl:new THREE.MeshLambertMaterial({color:0xd9d1bf, side:THREE.DoubleSide})};
+// 사라진 적(병사·보스·기사·비행선·도둑)의 GPU 자원 정리: 자기만 쓰는 지오메트리·재질, 팔다리 뼈 텍스처, 비행선 기낭 무늬 텍스처.
+// 여러 적이 함께 쓰는 상자 모양(SG)·화살(AG·AM)·바닥 무늬(TEX)는 그대로 둠 (다시 쓰면 셰이더를 새로 만들어야 해서 멈칫함)
+function disposeEnemy(e){
+  if (!e || !e.g || e.disposed) return; e.disposed = true;
+  const keepGeo = new Set([...Object.values(SG), ...Object.values(AG)]), keepMat = new Set(Object.values(AM)), keepTex = new Set(Object.values(TEX));
+  const mats = new Set();
+  e.g.traverse(o => {
+    if (o.geometry && !keepGeo.has(o.geometry) && !o.geometry.userData.shared) o.geometry.dispose();
+    if (o.isSkinnedMesh && o.skeleton && o.skeleton.boneTexture){ o.skeleton.boneTexture.dispose(); o.skeleton.boneTexture = null; }
+    if (o.material) [].concat(o.material).forEach(m => mats.add(m));
+  });
+  (e.mats || []).forEach(m => mats.add(m));
+  for (const m of mats){
+    if (keepMat.has(m)) continue;
+    if (m.map && !keepTex.has(m.map) && !(m.map.userData && m.map.userData.shared)) m.map.dispose(); // r128 텍스처에는 userData가 없음
+    m.dispose();
+  }
+}
 // ---------- 화살 탄도 ----------
 // 중력이 있는 포물선. 거리 d, 높이차 h, 속력 v일 때 맞힐 수 있는 낮은 발사각:
 // tanθ = (v² − √(v⁴ − g(g·d² + 2h·v²))) / (g·d)
@@ -2556,7 +2574,7 @@ function applyKill(e, k){ // Combat이 정한 처치 보상을 게임에 적용
     bits.push({m, v:new THREE.Vector3((Math.random()-.5)*7, Math.random()*6, (Math.random()-.5)*7), life:.7});
   }
   const ex = e.g.position.x, ez = e.g.position.z;
-  scene.remove(e.g); enemies.splice(enemies.indexOf(e),1); sfx.kill();
+  scene.remove(e.g); enemies.splice(enemies.indexOf(e),1); disposeEnemy(e); sfx.kill();
   score += k.score; updateHUD(); gainXP(k.xp);
   if (k.skill) addSkill(k.skill);
   spawnCoins(ex, ez, k.gold);
@@ -2929,7 +2947,7 @@ const THIEF_WORLD = {
 };
 const THIEF_FX = {
   takeCoin(c, i){ jingle(c.m); scene.remove(c.m); coins.splice(i, 1); },
-  escape(e){ scene.remove(e.g); enemies.splice(enemies.indexOf(e), 1); showNotice(`도둑이 ${e.stolen || 0}G를 들고 성문 밖으로 달아났어요`, 0xffb38a); updateHUD(); },
+  escape(e){ scene.remove(e.g); enemies.splice(enemies.indexOf(e), 1); disposeEnemy(e); showNotice(`도둑이 ${e.stolen || 0}G를 들고 성문 밖으로 달아났어요`, 0xffb38a); updateHUD(); },
 };
 function updateThief(e, dt, p, dist){
   const g = e.g;
@@ -6180,7 +6198,7 @@ function showLoadout(){
 // 보스는 resetBoss, 골드·회복템은 resetShop, 장비는 armory, 웨이브는 director)
 let WORLD0 = null; // 첫 판 시작 때의 엄폐물·충돌 상자·횃불 목록 (보스가 부순 것을 되살릴 때 씀)
 function resetWorld(){ // 적·화살·보급품을 치우고, 보스가 부순 엄폐물을 원래 순서대로 되살림
-  enemies.slice().forEach(e=>scene.remove(e.g)); enemies.length=0;
+  enemies.slice().forEach(e=>{ scene.remove(e.g); disposeEnemy(e); }); enemies.length=0;
   shots.forEach(s=>scene.remove(s.m)); shots.length=0;
   pickups.forEach(k=>scene.remove(k.g)); pickups.length = 0; dropTimer = 45;
   bits.forEach(b=>scene.remove(b.m)); bits.length = 0; tracers.forEach(t=>scene.remove(t.line)); tracers.length = 0; flames.forEach(f=>scene.remove(f.m)); flames.length = 0; // 지난 판의 파편·불꽃·탄 궤적
