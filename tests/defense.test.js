@@ -195,3 +195,20 @@ test('패리가 깨질 때 받는 피해는 breakDmgMul 배 (없으면 그대로
   const r = Defense.resolve(atk('bossMelee', { breakPow: 130, breakDmgMul: .05 }), def(Object.assign({ parryPow: 100 }, PARRY)));
   assert.equal(r.outcome, 'parryBroken'); close(r.damage, .5);
 });
+
+// ---------- CQB (총 패링: 강도 0, 투사체는 막기만) ----------
+const CQB = { parryT: .3, parryPow: 0, noReturn: true };
+
+test('CQB: 강도 0으로 강한 공격(pow)을 패리하면 막지만 60% 피해, 패리 파괴 공격(breakPow)엔 깨진다', () => {
+  const r = Defense.resolve(atk('bossMelee', { pow: 100 }), def(CQB));
+  assert.equal(r.outcome, 'parried'); close(r.damage, 6);
+  assert.equal(Defense.resolve(atk('bossMelee'), def(CQB)).damage, 0);
+  assert.equal(Defense.resolve(atk('bossMelee', { breakPow: 1 }), def(CQB)).outcome, 'parryBroken');
+});
+
+test('CQB: 화살·반사탄은 막기만 하고 되돌리지 않는다', () => {
+  const a = Defense.resolve(atk('arrow', { inParryRange: true }), def(CQB));
+  assert.equal(a.outcome, 'parried'); assert.equal(a.damage, 0); assert.equal(a.returnProjectile, false);
+  const b = Defense.resolve(atk('bullet', { canReturn: true, inParryRange: true }), def(CQB));
+  assert.equal(b.outcome, 'parried'); assert.equal(b.damage, 0); assert.equal(b.returnProjectile, false);
+});
