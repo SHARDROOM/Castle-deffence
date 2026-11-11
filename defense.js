@@ -91,7 +91,8 @@
   //             src = 패리 성공 시 비틀거릴 적, srcR = 그 적의 반지름,
   //             dist = 미리 잰 거리 (없으면 from으로 계산), canReturn = 반사탄을 되돌릴 보스가 있는가,
   //             inParryRange = (투사체) 패리를 누른 순간 패리 사거리 안에 있었는가
-  //   defender: {x, z, rollT, inExec, adrenT, guarding, guardResist, parryT, parryRange, parryPow}
+  //   defender: {x, z, rollT, inExec, adrenT, guarding, guardResist, parryT, parryRange, parryPow, noReturn}
+  //             noReturn = 패리한 투사체를 되돌리지 않고 막기만 (CQB 총 패링)
   //             guardResist = 가드하면 넉백·둔화를 버티는 조합인가 (지키는 자 + 대검)
   //   반환:     {outcome: 'dodged'|'immune'|'parried'|'parryBroken'|'guarded'|'hit', damage, landed, fx,
   //             parried, parryTarget, parryBroken, guardBlocked, returnProjectile, showDodge, resistDebuff}
@@ -115,13 +116,13 @@
       case 'arrow':
         if (d.rollT > 0) return result({ outcome: 'dodged', showDodge: true });
         if (d.guarding) return core(attack, d, p, p.parryable, { returnProjectile: true });
-        if (d.parryT > 0 && attack.inParryRange) return result({ outcome: 'parried', parried: true, parryTarget: null, returnProjectile: true });
+        if (d.parryT > 0 && attack.inParryRange) return result({ outcome: 'parried', parried: true, parryTarget: null, returnProjectile: !d.noReturn });
         return core(attack, d, p, p.parryable);
       case 'bullet':
         if (d.rollT > 0) return result({ outcome: 'dodged' });
         if (attack.canReturn) {
           if (d.guarding) return core(attack, d, p, p.parryable, { returnProjectile: true });
-          if (d.parryT > 0 && attack.inParryRange) return result({ outcome: 'parried', parried: true, parryTarget: null, returnProjectile: true });
+          if (d.parryT > 0 && attack.inParryRange) return result({ outcome: 'parried', parried: true, parryTarget: null, returnProjectile: !d.noReturn });
         }
         return core(attack, d, p, p.parryable);
       default:

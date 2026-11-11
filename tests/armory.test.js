@@ -197,3 +197,22 @@ test('연속 찌르기 횟수 = 반올림(3 × 공격 속도 배율), 최대 8�
   assert.equal(at({ blade: 'rapierb', guard: 'rapierg' }, 1.15), 6); // 아드레날린
   assert.equal(at({ blade: 'rapierb', guard: 'rapierg' }, 3), 8);    // 최대 8번
 });
+
+// ---------- CQB (총 패링 스킬) ----------
+test('CQB: 네 가지 총 모두 장착하면 총 패링이 켜지고, 패링 강도는 0, 게이지 스킬은 없다', () => {
+  const a = rich();
+  for (const key of ['rifle', 'pistol', 'sniper', 'shotgun']) {
+    assert.equal(a.equip(key, 'skill', 'sk_cqb').ok, true, key);
+    const w = Armory.weaponStats(key, undefined, a.gear);
+    assert.equal(w.cqb, true, key);
+    assert.equal(w.parryPow || 0, 0, key);
+    assert.equal(w.skill, undefined, key);
+  }
+});
+
+test('CQB: 300골드에 사고, 강화는 할 수 없다', () => {
+  const a = rich(1000);
+  assert.deepEqual(a.equip('rifle', 'skill', 'sk_cqb'), { ok: true, bought: true, scopeRemoved: false });
+  assert.equal(a.gold, 700);
+  assert.equal(a.upgrade('rifle', 'skill', 'sk_cqb').reason, 'noUp');
+});

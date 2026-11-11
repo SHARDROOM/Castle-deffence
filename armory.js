@@ -98,7 +98,8 @@
       {id:'sk_bash',   name:'일격',   price:300, skill:'bash',   desc:'개머리판으로 주변 적을 밀쳐내며 둔화시키고, 곧바로 가장 가까운 적의 머리에 자동으로 두 발'},
       {id:'sk_double', name:'연사',   price:280, skill:'double', desc:'8초 동안 쏠 때마다 40% 확률로 총알 두 발 발사 (추가 탄은 탄창 소모 없음)'},
       {id:'sk_shell',  name:'강화탄', price:300, skill:'shell',  desc:'강화탄 3발 장전: 피해 2.2배, 맞은 적을 밀어내고 둔화'},
-      {id:'sk_heli',   name:'공중지원', price:420, skill:'heli', desc:'헬기를 불러 20초 동안 하늘을 돌며, 탑승한 사수 두 명이 지금 든 총과 같은 총으로 주변 적을 난사'}
+      {id:'sk_heli',   name:'공중지원', price:420, skill:'heli', desc:'헬기를 불러 20초 동안 하늘을 돌며, 탑승한 사수 두 명이 지금 든 총과 같은 총으로 주변 적을 난사'},
+      {id:'sk_cqb',    name:'CQB',    price:300, cqb:true, noUp:true, desc:'스킬 버튼으로 총을 들어 공격을 쳐냄 (게이지 없음, 쿨타임). 가드 강도 0 · 보스만 그로기가 쌓임 · 투사체는 막기만 함 · 강화 불가'}
     ],
     conv: [
       {id:'dual', name:'듀얼', price:250, desc:'양손에 권총을 하나씩 들고 번갈아 쏨: 연사 약 1.8배, 탄창 2배, 탄 퍼짐 +30%, 장전 +30%, 조준 불가', mod:{rate:.55, spread:1.3, mag:2, reload:1.3, dual:1}, only:['pistol']},
@@ -229,6 +230,7 @@
       if (m.slug){ w.dmg *= w.pellets*1.15; w.pellets = 1; w.falloff = 0; w.slug = true; } // 슬러그: 한 발로 뭉침
       if (m.spreadMin) w.spread = Math.max(w.spread, m.spreadMin);
       if (part.skill){ w.skill = part.skill; w.skillMul = m.lvMul; } // 장착한 스킬과 강화 배율
+      if (part.cqb) w.cqb = true;                                     // CQB: 게이지 없이 스킬 버튼으로 총 패링 (패링 강도 0)
       if (part.zoom && scopeAllowed(eq)){ w.sightH = (MOUNT_Y[key] || .047) + SIGHT_OFF[part.type]; w.zoom = true; w.zoomX = part.zoom; w.aimCut = Math.min(1, part.aimCut*m.lvMul); w.scopeType = part.type; w.zoomFov = 2*Math.atan(Math.tan(75*Math.PI/360)/part.zoom)*180/Math.PI; }
     }
     return w;
